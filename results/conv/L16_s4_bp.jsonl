@@ -1,0 +1,1 @@
+{"arch": "conv", "depth": 16, "seed": 4, "method": "bp", "budget": 0, "channels": 8, "spatial": 7, "state_lr": 0.21703678398187992, "lambda_max": 4.607513904571533, "learning_rate": 0.0049497474683058325, "train_subset": 60000, "test_acc": 0.8993, "finite": true, "wall_sec": 10.28}

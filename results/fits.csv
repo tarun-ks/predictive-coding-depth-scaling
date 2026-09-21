@@ -1,0 +1,21 @@
+metric,method,tolerance,slope,ci_lo,ci_hi,r2,n,n_depths,within_depth_sd_logT,exact_fit
+T_task_literal,pc,1% abs,2.0,2.0,2.0,1.0,25,5,0.0,1
+T_task_literal,pcalm,1% abs,1.2523,1.1145,1.3901,0.9938,21,6,0.0,0
+T_target,pc,90%_of_BP,1.9164,1.7825,2.0504,0.9975,30,6,0.0,0
+T_target,pcalm,90%_of_BP,1.269,1.1769,1.3611,0.9973,30,6,0.0,0
+T_target,pc,95%_of_BP,2.0669,1.8628,2.2709,0.995,30,6,0.0,0
+T_target,pcalm,95%_of_BP,1.2523,1.1145,1.3901,0.9938,30,6,0.0,0
+T_target,pc,98%_of_BP,2.01,1.9774,2.0426,0.9999,24,6,0.0302,0
+T_target,pcalm,98%_of_BP,1.4215,1.3704,1.4725,0.9993,30,6,0.1316,0
+T_res_init,pc,0.001,,,,,,,,
+T_res_init,pcalm,0.001,-0.2577,-0.6709,0.1554,0.3396,33,7,0.3359,0
+T_res_init,pc,0.000316,,,,,,,,
+T_res_init,pcalm,0.000316,0.1998,0.0032,0.3965,0.9053,14,4,0.2154,0
+T_res_init,pc,0.0001,,,,,,,,
+T_res_init,pcalm,0.0001,,,,,,,,
+T_res_trained,pc,0.001,,,,,,,,
+T_res_trained,pcalm,0.001,-0.0211,-0.2423,0.2001,0.0119,35,7,0.5786,0
+T_res_trained,pc,0.000316,,,,,,,,
+T_res_trained,pcalm,0.000316,-0.3868,-0.8676,0.094,0.461,33,7,0.3567,0
+T_res_trained,pc,0.0001,,,,,,,,
+T_res_trained,pcalm,0.0001,0.2708,-0.5554,1.0971,0.4986,14,4,0.294,0

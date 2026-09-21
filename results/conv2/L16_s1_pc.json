@@ -1,0 +1,1 @@
+{"depth": 16, "seed": 1, "method": "pc", "B_final": 32768, "self_consistent": 1, "dist_at_T1": 0.34615644812583923, "margin_achieved": 4.722974920726434, "wall_sec": 22.22, "T_conv_tol0.1": 818, "floor_limited_tol0.1": 0, "T_conv_tol0.03": 2155, "floor_limited_tol0.03": 0, "T_conv_tol0.01": 6938, "floor_limited_tol0.01": 0}

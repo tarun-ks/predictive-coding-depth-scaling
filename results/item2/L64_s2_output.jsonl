@@ -1,0 +1,7 @@
+{"depth": 64, "seed": 2, "arm": "output", "budget": 48, "mult_of_knee": 0.5, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.4088, "finite": true, "wall_sec": 22.7}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 96, "mult_of_knee": 1.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.475, "finite": true, "wall_sec": 40.6}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 192, "mult_of_knee": 2.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.8169, "finite": true, "wall_sec": 77.5}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 384, "mult_of_knee": 4.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.8488, "finite": true, "wall_sec": 156.59}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 768, "mult_of_knee": 8.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.851, "finite": true, "wall_sec": 287.46}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 1536, "mult_of_knee": 16.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.8494, "finite": true, "wall_sec": 557.34}
+{"depth": 64, "seed": 2, "arm": "output", "budget": 3072, "mult_of_knee": 32.0, "n_frozen": 31, "n_hidden": 63, "state_lr": 0.24317358345194945, "test_acc": 0.8465, "finite": true, "wall_sec": 1672.85}

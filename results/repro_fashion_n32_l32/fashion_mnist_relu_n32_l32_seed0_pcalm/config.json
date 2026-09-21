@@ -1,0 +1,31 @@
+{
+  "dataset": "fashion_mnist",
+  "method": {
+    "alpha": 1.0,
+    "budget": 64,
+    "inner_steps": 1,
+    "name": "pcalm",
+    "rho": 1.0,
+    "state_lr": 0.23588549900873967,
+    "weight_credit_timing": "pre_dual_energy"
+  },
+  "model": {
+    "activation": "relu",
+    "depth": 32,
+    "input_dim": 784,
+    "output_dim": 10,
+    "width": 32
+  },
+  "output_dir": "results/repro_fashion_n32_l32/fashion_mnist_relu_n32_l32_seed0_pcalm",
+  "training": {
+    "batch_size": 64,
+    "drop_last": true,
+    "epochs": 1,
+    "eta0": 0.001,
+    "gamma0": 1.0,
+    "learning_rate": null,
+    "seed": 0,
+    "test_subset": 10000,
+    "train_subset": 60000
+  }
+}

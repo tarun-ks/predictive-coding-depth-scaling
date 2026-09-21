@@ -1,0 +1,27 @@
+Standard-parameterization spectrum: why this file stops at L=32.
+=================================================================
+
+This run requested depths 4,8,16,32,64. It completed 4-32 and aborted at L=64
+when the shifted-Lanczos solve failed to converge. The completed rows are in
+sp_w32.csv; the abort is recorded below rather than discarded, because the
+failure itself is reported in the paper (Table 7): under the standard
+parameterization lambda_min falls fast enough that it stops being resolvable.
+
+L=64 was subsequently resolved in a separate run with a larger Krylov basis
+(ncv=200); see results/kappa/sp_64.csv. L=128 was not resolvable by any
+setting we tried. Local paths below rewritten to <repo>.
+
+Traceback (most recent call last):
+  File "<repo>/analysis/kappa.py", line 137, in <module>
+    lmax, lmin, k, n = spectrum(params, sc, sk, x, y, phi)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/analysis/kappa.py", line 71, in spectrum
+    mu = float(eigsh(op, k=k, which="LA", return_eigenvectors=False,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/.venv/lib/python3.11/site-packages/scipy/sparse/linalg/_eigen/arpack/arpack.py", line 1779, in eigsh
+    params.iterate()
+  File "<repo>/.venv/lib/python3.11/site-packages/scipy/sparse/linalg/_eigen/arpack/arpack.py", line 625, in iterate
+    self._raise_no_convergence()
+  File "<repo>/.venv/lib/python3.11/site-packages/scipy/sparse/linalg/_eigen/arpack/arpack.py", line 422, in _raise_no_convergence
+    raise ArpackNoConvergence(f"No convergence ({num_iter} iterations, "
+scipy.sparse.linalg._eigen.arpack.arpack.ArpackNoConvergence: ARPACK error -1: No convergence (20001 iterations, 0/3 eigenvectors converged)

@@ -1,0 +1,538 @@
+# Inner-iteration scaling with depth: PC vs PC-ALM
+
+Measurement only. No update rule, hyperparameter or algorithm was altered;
+all dynamics are imported verbatim from `pcalm/`.
+
+## Provenance
+
+- reference implementation: SakanaAI/pc-alm (MIT), arXiv 2605.31022
+- reproduction gate: Fashion-MNIST N=32 L=32 relu seed 0, T=2L -> BP 78.66% / PC 68.13% / PC-ALM 77.75%, matching the repo's published table exactly (0.00 pp on all three)
+- config: MNIST, residual MLP, width 32 (their default), relu, 1 epoch, batch 64, Adam lr = 1e-3*sqrt(W/L), gamma0=1, full 60k/10k split
+- `state_lr` (eta_h): paper's frozen eta_best_by_cell.csv at depths 8-128; depths 4 and 256 via the paper's own eta=1/lambda_max rule (calibrated power iteration). Fits are reported both over all depths and restricted to the frozen-table depths.
+- total training runs: **925**  |  residual cells: **70**  |  conv cells: **30**
+
+## Headline caveats
+
+1. **Metric (a) as specified is degenerate.** `free_init` sets activities to
+   the forward pass, so the constraint residual is *exactly 0* at T=0. For PC
+   it then *grows* to a nonzero equilibrium - those equilibrium residuals are
+   PC's error signals. `resid_argmin == 1` in every PC cell at both init and
+   trained parameters, so "first T below tol" is either 1 or never, at every
+   depth. PC is fully censored below; this is a property of the method, not a
+   run failure.
+2. **PC-ALM has no fixed point in T** at the paper's defaults (alpha=1, rho=1,
+   inner_steps=1). Its gradient cosine to its own T=100k limit peaks near
+   T~1024 then decays; duals grow without settling. It is censored in every
+   convergence cell. PC-ALM is accurate at a *budget*, not in a limit.
+3. Consequently the load-bearing comparison is the task metric, which is
+   well-posed for both methods.
+
+## (b) T_task - literal: first T within 1% absolute of accuracy at largest T
+
+
+**T_task (literal) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 12.0 | 0.0 | 12 | 12 |
+| 16 | 5 | 0 | 48.0 | 0.0 | 48 | 48 |
+| 32 | 5 | 0 | 192.0 | 0.0 | 192 | 192 |
+| 64 | 5 | 0 | 768.0 | 0.0 | 768 | 768 |
+| 128 | 0 | 5 | - | - | - | - |
+
+log-log fit: `+2.000  (residuals identically zero on 5 depth means; CI undefined, not infinitely precise)  n=25/5d`
+
+
+**T_task (literal) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 24.0 | 0.0 | 24 | 24 |
+| 32 | 2 | 3 | 48.0 | 0.0 | 48 | 48 |
+| 64 | 3 | 2 | 96.0 | 0.0 | 96 | 96 |
+| 128 | 1 | 4 | 256.0 | - | 256 | 256 |
+
+log-log fit: `+1.252  [+1.114, +1.390]  R2=0.994  n=21/6d (clustered, df=4)`
+
+> **On the SD column.** The budget ladder is geometric (ratio ~1.4), so when every seed falls in the same ladder bin the reported SD is 0. That means the seed-to-seed spread is *smaller than one ladder step*, not that it is zero. Read SD=0 as an upper bound of roughly 40% of the mean.
+
+- PC restricted to paper-frozen eta depths: `+2.000  (residuals identically zero on 4 depth means; CI undefined, not infinitely precise)  n=20/4d`
+- PC seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 300% per depth step)
+- PCALM restricted to paper-frozen eta depths: `+1.200  [+1.008, +1.392]  R2=0.993  n=16/5d (clustered, df=3)`
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 138% per depth step)
+
+### Plateau / censoring audit
+
+| method | depth | n | T_ref | plateau_reached | censored | acc_at_T_ref |
+|---|---|---|---|---|---|---|
+| pc | 4 | 5 | 16 | 5 | 0 | 0.8975 |
+| pc | 8 | 5 | 32 | 5 | 0 | 0.8901 |
+| pc | 16 | 5 | 64 | 5 | 0 | 0.8745 |
+| pc | 32 | 5 | 512 | 5 | 0 | 0.8545 |
+| pc | 64 | 5 | 1024 | 5 | 0 | 0.8304 |
+| pc | 128 | 5 | 3072 | 0 | 5 | 0.7955 |
+| pcalm | 4 | 5 | 16 | 5 | 0 | 0.898 |
+| pcalm | 8 | 5 | 32 | 5 | 0 | 0.8902 |
+| pcalm | 16 | 5 | 64 | 5 | 0 | 0.8781 |
+| pcalm | 32 | 5 | 512 | 2 | 3 | 0.8241 |
+| pcalm | 64 | 5 | 1024 | 3 | 2 | 0.7975 |
+| pcalm | 128 | 5 | 1024 | 1 | 4 | 0.7875 |
+
+## (b') T_task - robust: first T reaching a fraction of depth-matched BP
+
+
+**T_target @ 90% of BP — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 32.0 | 0.0 | 32 | 32 |
+| 32 | 5 | 0 | 128.0 | 0.0 | 128 | 128 |
+| 64 | 5 | 0 | 512.0 | 0.0 | 512 | 512 |
+| 128 | 5 | 0 | 2048.0 | 0.0 | 2048 | 2048 |
+
+log-log fit: `+1.916  [+1.782, +2.050]  R2=0.997  n=30/6d (clustered, df=4)`
+
+
+**T_target @ 90% of BP — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 16.0 | 0.0 | 16 | 16 |
+| 32 | 5 | 0 | 48.0 | 0.0 | 48 | 48 |
+| 64 | 5 | 0 | 96.0 | 0.0 | 96 | 96 |
+| 128 | 5 | 0 | 256.0 | 0.0 | 256 | 256 |
+
+log-log fit: `+1.269  [+1.177, +1.361]  R2=0.997  n=30/6d (clustered, df=4)`
+
+> **On the SD column.** The budget ladder is geometric (ratio ~1.4), so when every seed falls in the same ladder bin the reported SD is 0. That means the seed-to-seed spread is *smaller than one ladder step*, not that it is zero. Read SD=0 as an upper bound of roughly 40% of the mean.
+
+- PC restricted to frozen-eta depths: `+2.000  (residuals identically zero on 5 depth means; CI undefined, not infinitely precise)  n=25/5d`
+- PC seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 269% per depth step)
+- PCALM restricted to frozen-eta depths: `+1.258  [+1.100, +1.417]  R2=0.995  n=25/5d (clustered, df=3)`
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 143% per depth step)
+
+**T_target @ 95% of BP — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 32.0 | 0.0 | 32 | 32 |
+| 32 | 5 | 0 | 192.0 | 0.0 | 192 | 192 |
+| 64 | 5 | 0 | 768.0 | 0.0 | 768 | 768 |
+| 128 | 5 | 0 | 3072.0 | 0.0 | 3072 | 3072 |
+
+log-log fit: `+2.067  [+1.863, +2.271]  R2=0.995  n=30/6d (clustered, df=4)`
+
+
+**T_target @ 95% of BP — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 24.0 | 0.0 | 24 | 24 |
+| 32 | 5 | 0 | 48.0 | 0.0 | 48 | 48 |
+| 64 | 5 | 0 | 96.0 | 0.0 | 96 | 96 |
+| 128 | 5 | 0 | 256.0 | 0.0 | 256 | 256 |
+
+log-log fit: `+1.252  [+1.114, +1.390]  R2=0.994  n=30/6d (clustered, df=4)`
+
+> **On the SD column.** The budget ladder is geometric (ratio ~1.4), so when every seed falls in the same ladder bin the reported SD is 0. That means the seed-to-seed spread is *smaller than one ladder step*, not that it is zero. Read SD=0 as an upper bound of roughly 40% of the mean.
+
+- PC restricted to frozen-eta depths: `+2.175  [+1.989, +2.362]  R2=0.998  n=25/5d (clustered, df=3)`
+- PC seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 300% per depth step)
+- PCALM restricted to frozen-eta depths: `+1.200  [+1.008, +1.392]  R2=0.993  n=25/5d (clustered, df=3)`
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 143% per depth step)
+
+**T_target @ 98% of BP — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 11.2 | 1.79 | 8 | 12 |
+| 16 | 5 | 0 | 48.0 | 0.0 | 48 | 48 |
+| 32 | 4 | 1 | 192.0 | 0.0 | 192 | 192 |
+| 64 | 4 | 1 | 768.0 | 0.0 | 768 | 768 |
+| 128 | 1 | 4 | 3072.0 | - | 3072 | 3072 |
+
+log-log fit: `+2.010  [+1.977, +2.043]  R2=1.000  n=24/6d (clustered, df=4)`
+
+
+**T_target @ 98% of BP — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 3.0 | 0.0 | 3 | 3 |
+| 8 | 5 | 0 | 8.0 | 0.0 | 8 | 8 |
+| 16 | 5 | 0 | 24.0 | 0.0 | 24 | 24 |
+| 32 | 5 | 0 | 64.0 | 35.78 | 48 | 128 |
+| 64 | 5 | 0 | 166.4 | 35.05 | 128 | 192 |
+| 128 | 5 | 0 | 409.6 | 57.24 | 384 | 512 |
+
+log-log fit: `+1.421  [+1.370, +1.472]  R2=0.999  n=30/6d (clustered, df=4)`
+
+> **On the SD column.** The budget ladder is geometric (ratio ~1.4), so when every seed falls in the same ladder bin the reported SD is 0. That means the seed-to-seed spread is *smaller than one ladder step*, not that it is zero. Read SD=0 as an upper bound of roughly 40% of the mean.
+
+- PC restricted to frozen-eta depths: `+2.023  [+1.980, +2.066]  R2=1.000  n=19/5d (clustered, df=3)`
+- PC seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 300% per depth step)
+- PCALM restricted to frozen-eta depths: `+1.410  [+1.327, +1.494]  R2=0.999  n=25/5d (clustered, df=3)`
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 7% vs 167% per depth step)
+
+## (a) T_res - literal constraint-residual threshold
+
+Tolerances 0.001, 0.000316, 0.0001 span one order of magnitude,
+chosen from the observed residual range ({'median_resid_at_T1': 0.004954661708325148, 'min_observed': 7.282393653440522e-06, 'max_observed_min': 0.00471119862049818}) and then applied
+uniformly to every depth, method, seed and parameter point.
+
+
+**T_res @ tol=0.001 (init params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.001 (init params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 4 | 1 | 109.75 | 13.33 | 96 | 128 |
+| 8 | 4 | 1 | 594.0 | 614.06 | 144 | 1498 |
+| 16 | 5 | 0 | 66.8 | 14.1 | 51 | 80 |
+| 32 | 5 | 0 | 84.8 | 9.26 | 76 | 97 |
+| 64 | 5 | 0 | 72.6 | 23.37 | 41 | 96 |
+| 128 | 5 | 0 | 74.6 | 18.76 | 46 | 96 |
+| 256 | 5 | 0 | 66.2 | 17.24 | 41 | 87 |
+
+log-log fit: `-0.258  [-0.671, +0.155]  R2=0.340  n=33/7d (clustered, df=5)`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 25% vs 44% per depth step)
+
+**T_res @ tol=0.000316 (init params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.000316 (init params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 1 | 4 | 264.0 | - | 264 | 264 |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 3 | 2 | 469.33 | 336.79 | 240 | 856 |
+| 128 | 5 | 0 | 456.6 | 40.75 | 389 | 492 |
+| 256 | 5 | 0 | 670.8 | 65.9 | 610 | 769 |
+
+log-log fit: `+0.200  [+0.003, +0.396]  R2=0.905  n=14/4d (clustered, df=2)`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 10% vs 21% per depth step)
+
+**T_res @ tol=0.0001 (init params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.0001 (init params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: not assessable (too few uncensored depths)
+
+**T_res @ tol=0.001 (trained params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 1 | 4 | 1.0 | - | 1 | 1 |
+| 8 | 1 | 4 | 1.0 | - | 1 | 1 |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.001 (trained params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 11.6 | 8.79 | 1 | 18 |
+| 8 | 5 | 0 | 3.6 | 2.61 | 1 | 7 |
+| 16 | 5 | 0 | 5.4 | 0.89 | 5 | 7 |
+| 32 | 5 | 0 | 4.6 | 1.67 | 3 | 7 |
+| 64 | 5 | 0 | 4.6 | 1.67 | 3 | 7 |
+| 128 | 5 | 0 | 4.6 | 1.67 | 3 | 7 |
+| 256 | 5 | 0 | 5.4 | 3.29 | 3 | 11 |
+
+log-log fit: `-0.021  [-0.242, +0.200]  R2=0.012  n=35/7d (clustered, df=5)`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: **SEED VARIANCE COMPARABLE TO DEPTH EFFECT**: median within-depth relative SD = 36%, vs 22% mean change per depth doubling. The depth trend is NOT cleanly separated from seed noise for this metric.
+
+**T_res @ tol=0.000316 (trained params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.000316 (trained params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 181.8 | 85.16 | 89 | 284 |
+| 8 | 4 | 1 | 334.5 | 105.96 | 227 | 428 |
+| 16 | 4 | 1 | 680.5 | 120.36 | 501 | 754 |
+| 32 | 5 | 0 | 91.6 | 9.24 | 81 | 104 |
+| 64 | 5 | 0 | 119.2 | 57.42 | 50 | 161 |
+| 128 | 5 | 0 | 74.8 | 22.92 | 57 | 113 |
+| 256 | 5 | 0 | 76.8 | 46.63 | 45 | 155 |
+
+log-log fit: `-0.387  [-0.868, +0.094]  R2=0.461  n=33/7d (clustered, df=5)`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 32% vs 44% per depth step)
+
+**T_res @ tol=0.0001 (trained params) — PC** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 0 | 5 | - | - | - | - |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 0 | 5 | - | - | - | - |
+| 256 | 0 | 5 | - | - | - | - |
+
+log-log fit: `insufficient uncensored data`
+
+
+**T_res @ tol=0.0001 (trained params) — PCALM** (mean ± SD over seeds; censored = excluded, counted)
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 2 | 3 | 247.5 | 62.93 | 203 | 292 |
+| 8 | 2 | 3 | 830.5 | 62.93 | 786 | 875 |
+| 16 | 0 | 5 | - | - | - | - |
+| 32 | 0 | 5 | - | - | - | - |
+| 64 | 0 | 5 | - | - | - | - |
+| 128 | 5 | 0 | 1898.4 | 984.5 | 431 | 3206 |
+| 256 | 5 | 0 | 803.8 | 66.76 | 748 | 907 |
+
+log-log fit: `+0.271  [-0.555, +1.097]  R2=0.499  n=14/4d (clustered, df=2)`
+
+- PC seed-vs-depth: not assessable (too few uncensored depths)
+- PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 17% vs 97% per depth step)
+
+## (a') T_conv - EXPLORATORY ONLY, no exponent quoted
+
+This was my own substitute for the degenerate metric (a), not one of the two
+requested measurements. **It failed validation; no slope should be read off
+it.** T_conv is measured against the activity state after a reference solve
+of budget B, and a valid measurement must be independent of B. It is not:
+
+| depth | n_distinct_B | B_ratio | T_conv_ratio | B_dependent |
+|---|---|---|---|---|
+| 4 | 1 | 1.0 | - | untestable (single B) |
+| 8 | 1 | 1.0 | - | untestable (single B) |
+| 16 | 3 | 4.0 | 2.67 | YES |
+| 32 | 1 | 1.0 | - | untestable (single B) |
+| 64 | 3 | 4.0 | 2.29 | YES |
+| 128 | 2 | 2.0 | 1.62 | YES |
+
+At depth 64 one seed stopped at B=131072 and reports T_conv=43329 while two
+others ran to B=524288 and report ~99400 - a 2.3x spread driven entirely by
+how far the reference solve ran, not by the seed. The apparent seed variance
+at depths 16 and 64 is therefore mostly this artefact, not seed noise.
+
+Cause: PC's inner loop has slow modes, and float32 accumulation over
+million-step scans stops the fixed point being pinned down at L>=16. The
+margin needed grows with depth; 3x is not enough. Raising it costs ~10x more
+compute with no guarantee of convergence, and float64 would change the
+numerics of the object being measured.
+
+Raw values are in `t_conv.csv`. What survives qualitatively: PC does reach a
+fixed point and its iteration count grows steeply with depth; PC-ALM never
+stabilises at any depth or seed (30/30 censored). Neither statement needs a
+slope. T_conv is excluded from fits.csv.
+
+
+**T_conv @ tol=0.1 (PC, EXPLORATORY - not a measurement)**
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 0 | 5 | - | - | - | - |
+| 8 | 5 | 0 | 60.8 | 17.87 | 29 | 71 |
+| 16 | 5 | 0 | 671.2 | 117.68 | 529 | 818 |
+| 32 | 5 | 0 | 3411.6 | 450.29 | 2944 | 3979 |
+| 64 | 5 | 0 | 17135.4 | 3303.61 | 13677 | 22172 |
+| 128 | 5 | 0 | 83696.8 | 8811.64 | 71844 | 92425 |
+
+**T_conv @ tol=0.03 (PC, EXPLORATORY - not a measurement)**
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 31.4 | 2.07 | 29 | 34 |
+| 8 | 5 | 0 | 300.2 | 25.01 | 265 | 328 |
+| 16 | 5 | 0 | 1925.2 | 256.39 | 1574 | 2190 |
+| 32 | 5 | 0 | 8992.0 | 1150.21 | 7253 | 10041 |
+| 64 | 5 | 0 | 45262.2 | 9799.76 | 29343 | 53142 |
+| 128 | 5 | 0 | 173473.6 | 28144.41 | 141396 | 215508 |
+
+**T_conv @ tol=0.01 (PC, EXPLORATORY - not a measurement)**
+
+| depth | n | censored | mean | SD | min | max |
+|---|---|---|---|---|---|---|
+| 4 | 5 | 0 | 78.6 | 6.27 | 72 | 87 |
+| 8 | 5 | 0 | 562.2 | 26.73 | 515 | 580 |
+| 16 | 5 | 0 | 4027.0 | 1701.48 | 2594 | 6938 |
+| 32 | 5 | 0 | 12928.0 | 1271.47 | 11427 | 14392 |
+| 64 | 5 | 0 | 74808.8 | 24323.88 | 43329 | 99522 |
+| 128 | 5 | 0 | 246438.8 | 65880.39 | 193047 | 355541 |
+
+
+## Divergence / failure audit
+
+No depth is silently dropped. `n_nonfinite` counts runs with non-finite
+loss or accuracy; `n_at_or_below_chance` counts runs that never learned.
+
+| method | depth | n_runs | n_nonfinite | n_at_or_below_chance | best_test_acc | max_T_run |
+|---|---|---|---|---|---|---|
+| bp | 4 | 5 | 0 | 0 | 0.9053 | 0 |
+| bp | 8 | 5 | 0 | 0 | 0.8983 | 0 |
+| bp | 16 | 5 | 0 | 0 | 0.8887 | 0 |
+| bp | 32 | 5 | 0 | 0 | 0.8783 | 0 |
+| bp | 64 | 5 | 0 | 0 | 0.8539 | 0 |
+| bp | 128 | 5 | 0 | 0 | 0.8393 | 0 |
+| pc | 4 | 40 | 0 | 0 | 0.9041 | 16 |
+| pc | 8 | 50 | 0 | 0 | 0.8974 | 32 |
+| pc | 16 | 60 | 0 | 0 | 0.8809 | 64 |
+| pc | 32 | 90 | 0 | 0 | 0.8605 | 512 |
+| pc | 64 | 100 | 0 | 0 | 0.8437 | 1024 |
+| pc | 128 | 115 | 0 | 0 | 0.8081 | 3072 |
+| pcalm | 4 | 40 | 0 | 0 | 0.9049 | 16 |
+| pcalm | 8 | 50 | 0 | 0 | 0.897 | 32 |
+| pcalm | 16 | 60 | 0 | 0 | 0.8834 | 64 |
+| pcalm | 32 | 90 | 0 | 0 | 0.8725 | 512 |
+| pcalm | 64 | 100 | 0 | 0 | 0.8474 | 1024 |
+| pcalm | 128 | 100 | 0 | 0 | 0.8312 | 1024 |
+
+## Plain-language summary of the slopes
+
+What the exponent means: T ~ depth^slope, so slope 1 means doubling depth
+doubles the inner iterations needed; slope 2 means it quadruples them.
+No judgement is offered here about whether any slope is good.
+
+- **At 90% of BP accuracy:**
+  - PC: slope +1.916 (95% CI [+1.782, +2.050], R2=0.997)
+  - PCALM: slope +1.269 (95% CI [+1.177, +1.361], R2=0.997)
+- **At 95% of BP accuracy:**
+  - PC: slope +2.067 (95% CI [+1.863, +2.271], R2=0.995)
+  - PCALM: slope +1.252 (95% CI [+1.114, +1.390], R2=0.994)
+- **At 98% of BP accuracy:**
+  - PC: slope +2.010 (95% CI [+1.977, +2.043], R2=1.000), 6 censored cell(s)
+  - PCALM: slope +1.421 (95% CI [+1.370, +1.472], R2=0.999)
+
+In words: PC's inner-iteration requirement grows about quadratically with
+depth (slope near 2); PC-ALM's grows about linearly, with an exponent near
+1.25 rather than exactly 1. The two confidence intervals are far apart at
+every threshold. Metric (a) yields no exponent for PC at any tolerance
+because its residual never decreases (see caveat 1); for PC-ALM metric (a)
+is roughly flat in depth, and its seed spread is large enough that the
+depth trend there is not separable from seed noise.
+
+**Depth 256 was dropped from both task metrics.** Its budget ladder alone
+costs ~36 h of serial CPU (~5 h even at 7x parallelism) against ~2.5 h for
+depths 4-128 combined. It is retained in the residual measurement (a),
+where it needs one training run per cell rather than a full ladder.
+
+
+---
+
+## Known weakness in this workflow: numbers are typed, not generated
+
+Every fitted value in the write-up is a hand-typed literal. Nothing connects a number
+in the `.tex` to the data it came from, so a value that was correct against an earlier
+state of the pipeline can silently stop being correct.
+
+This is not hypothetical. one restricted-depth PC-ALM fit once read
+`+1.200 [1.008, 1.392]` where the raw data gives `+1.259 [1.100, 1.417]`; every other
+fit in that table reproduced to three or four decimals. It was caught by recomputing
+the whole table from `results/t_target_bp_relative.csv`, which is the only way this
+class of error can be caught: prose review cannot falsify a fitted value, only its
+inputs can.
+
+All eight rows of that table have since been re-derived from raw data and match, and
+the same check is re-run after any edit that touches a number.
+
+**The durable fix, not yet implemented.** Emit every fitted value from the analysis
+scripts into a generated `numbers.tex` of `\newcommand`s, and cite those macros in the
+body rather than typing literals:
+
+    % numbers.tex -- GENERATED, do not edit
+    \newcommand{\pcalmRestrictedSlope}{1.259}
+    \newcommand{\pcalmRestrictedCI}{[1.100, 1.417]}
+
+A stale value then becomes a build failure or a diff. The pieces already exist:
+`analysis/report.py` and `analysis/refine_ttarget.py` compute every fit in the study.

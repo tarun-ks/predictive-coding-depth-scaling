@@ -1,0 +1,24 @@
+# upstream package, fetched by setup.sh at a pinned commit
+/pcalm-upstream/
+/pcalm
+/configs
+
+# environment and datasets
+.venv/
+/data/
+__pycache__/
+*.pyc
+
+# run logs
+/logs/
+
+# LaTeX build artifacts (the sources in paper/ are tracked)
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.abs
+*.synctex.gz
+*.fls
+*.fdb_latexmk

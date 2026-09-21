@@ -1,0 +1,1 @@
+{"depth": 8, "seed": 4, "method": "pc", "T_ref_used": 2048, "ref_gap": 0.0006463583558797836, "ref_stable": true, "wall_sec": 1.01, "T_conv_tol0.1": 67, "T_conv_tol0.03": 328, "T_conv_tol0.01": 573}
