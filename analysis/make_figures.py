@@ -1,8 +1,6 @@
-"""Generate all manuscript figures as vector PDFs, one image per file.
+"""Generate all figures as vector PDFs, one image per file.
 
-Every figure is a data visualisation derived directly from the collected runs by
-reproducible computation, which is what Elsevier's GenAI policy permits; each
-caption in the write-up carries the required disclosure.
+Every figure is a data visualisation computed directly from the collected runs.
 """
 from __future__ import annotations
 import json, glob, csv, sys
@@ -77,7 +75,7 @@ fig,ax=plt.subplots(figsize=(4.6,3.6))
 for d,c,lab,mk in ((mup,CPC,r"$\mu$P parameterization","o"),(sp,CALM,"standard parameterization","s")):
     L=np.array(sorted(d)); y=np.array([np.mean(d[k]) for k in L])
     if d is sp:
-        # L=64 is an indicative estimate only (Table 9): the shifted-operator recovery
+        # L=64 is an indicative estimate only (indicative only): the shifted-operator recovery
         # loses digits in proportion to kappa and the implied error there exceeds unity.
         # Draw it hollow so the figure cannot be read as four resolved points plus one.
         res=L<64; ind=L>=64

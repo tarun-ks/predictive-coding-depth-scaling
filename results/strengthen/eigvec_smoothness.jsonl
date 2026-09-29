@@ -1,0 +1,12 @@
+{"depth": 64, "seed": 0, "width": 32, "lambda_min": 0.000256749947960877, "envelope_roughness": 0.027942944131375526, "direction_alignment": 0.995294353666545, "linear_interp_rel_error": 0.04398530733163304}
+{"depth": 64, "seed": 1, "width": 32, "lambda_min": 0.00019394942457306996, "envelope_roughness": 0.031028179133224924, "direction_alignment": 0.9945558173759484, "linear_interp_rel_error": 0.05397562845019631}
+{"depth": 128, "seed": 0, "width": 32, "lambda_min": 6.363272404641407e-05, "envelope_roughness": 0.017556194708132175, "direction_alignment": 0.9971190312692806, "linear_interp_rel_error": 0.0405155541321213}
+{"depth": 128, "seed": 1, "width": 32, "lambda_min": 6.467574175950119e-05, "envelope_roughness": 0.017271476359446883, "direction_alignment": 0.99724211327054, "linear_interp_rel_error": 0.03605047951920408}
+{"depth": 16, "seed": 0, "width": 32, "lambda_min": 0.003804930412043994, "envelope_roughness": 0.1072069793149155, "direction_alignment": 0.9779430502425926, "linear_interp_rel_error": 0.10828015882187612}
+{"depth": 16, "seed": 1, "width": 32, "lambda_min": 0.004558359539326595, "envelope_roughness": 0.11011421659275665, "direction_alignment": 0.9823383981742617, "linear_interp_rel_error": 0.09473870921124734}
+{"depth": 16, "seed": 2, "width": 32, "lambda_min": 0.004865622777120215, "envelope_roughness": 0.10071757715009232, "direction_alignment": 0.9852432599273871, "linear_interp_rel_error": 0.08142668427205849}
+{"depth": 32, "seed": 0, "width": 32, "lambda_min": 0.00092624001281294, "envelope_roughness": 0.055501355285390484, "direction_alignment": 0.9897201073563514, "linear_interp_rel_error": 0.08177919361409744}
+{"depth": 32, "seed": 1, "width": 32, "lambda_min": 0.0010964624635612097, "envelope_roughness": 0.05662380040694837, "direction_alignment": 0.9910837342325627, "linear_interp_rel_error": 0.0625403298412101}
+{"depth": 32, "seed": 2, "width": 32, "lambda_min": 0.0010445938132983557, "envelope_roughness": 0.0561597941109014, "direction_alignment": 0.9902160036940998, "linear_interp_rel_error": 0.07036134834408773}
+{"depth": 64, "seed": 2, "width": 32, "lambda_min": 0.00027730795951175224, "envelope_roughness": 0.031823638660537404, "direction_alignment": 0.994462382161975, "linear_interp_rel_error": 0.05355203695553359}
+{"depth": 128, "seed": 2, "width": 32, "lambda_min": 7.57833908542338e-05, "envelope_roughness": 0.017424188310606662, "direction_alignment": 0.9977253618197868, "linear_interp_rel_error": 0.032680465105596745}

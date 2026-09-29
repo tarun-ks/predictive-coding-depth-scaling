@@ -19,6 +19,13 @@ was altered; every measurement is taken by an external caller.
 | quantity | result |
 |---|---|
 | Activity-Hessian condition number, no training | κ ~ L<sup>2.024</sup>, CI [1.953, 2.095] |
+| …extended to depth 512 (float64) | κ ~ L<sup>2.015</sup>, CI [1.973, 2.058], 128× range |
+| …with the residual connection weakened (any c < 1) | flat or falling in depth; forward pass underflows |
+| PC inference budget, CIFAR-10 | L<sup>2.000</sup> (exact, 5 depths) |
+| PC-ALM inference budget, CIFAR-10 | L<sup>1.258</sup>, CI [1.018, 1.499] |
+| Inner solve only, spectrum-set Nesterov | L<sup>0.996</sup>, CI [0.935, 1.056] = the Omega(L) floor |
+| Inner solve only, multigrid V-cycle | work L<sup>1.745</sup>, rounds L<sup>2.425</sup> |
+| Conditioning x squared signal distortion | >= (n/pi)<sup>2</sup>, holds in all 132 measured cells |
 | …repeated with 8 inputs per seed | κ ~ L<sup>2.036</sup>, CI [1.955, 2.116] |
 | …on a convolutional stack | κ ~ L<sup>2.228</sup>, CI [1.929, 2.526] |
 | PC inference budget vs depth | L<sup>1.916</sup>, CI [1.782, 2.050] |
@@ -27,10 +34,14 @@ was altered; every measurement is taken by an external caller.
 | Gradient-alignment budget, no accuracy criterion | L<sup>1.110</sup>, CI [0.951, 1.269] |
 | Budget-grid systematic, from 4 offset ladders | ±0.066 |
 
-The last three rows are the interesting part: an off-the-shelf accelerated inner solver,
-given only the measured spectrum and nothing tuned, reproduces PC-ALM's inference budget
-at every depth measured at refined resolution. The quadratic iteration count is a
-property of the solver, not of the problem.
+Two rows carry most of the weight. An off-the-shelf accelerated inner solver, given only
+the measured spectrum and nothing tuned, reproduces PC-ALM's inference budget at every
+depth measured at refined resolution: the quadratic iteration count is a property of the
+solver, not of the problem. And the conditioning itself is caused by the residual
+connection. Scaling the skip by c and sweeping it, κ grows with depth only at c = 1; at
+every smaller c the inner problem gets easier with depth while the activation scale
+underflows float32 and backpropagation drops to chance. The well-conditioned inner
+problem exists only on networks nothing can train.
 
 ## Quick start
 
@@ -68,6 +79,7 @@ python -m analysis.validate_generic
 | `item1/` | per-layer gradient alignment against backpropagation |
 | `robust/` | dataset, width and epoch robustness conditions |
 | `conv/`, `conv2/` | convolutional variant; spectra usable, training discarded |
+| `strengthen/` | depth-512 spectra, skip-strength sweep, Hopfield-energy spectra |
 | `alpha/`, `item2/`, `task2/`, `task3/`, `resid/`, `reconcile/` | dual step-size sweep, freezing intervention, exploratory metrics |
 
 ### Key scripts
@@ -82,7 +94,15 @@ python -m analysis.validate_generic
 | `run_item1.py` | per-layer and whole-network gradient alignment |
 | `refine_ttarget.py` | budget-to-threshold with hold window and censoring |
 | `report.py` | cluster-corrected log–log fits |
+| `skip_strength.py` | sweeps residual strength c; κ, forward RMS and BP accuracy together |
+| `kappa_family.py` | spectra for the no-skip chain and the Hopfield energy |
+| `run_noskip.py` | trains the dense network with the skip removed |
+| `run_cifar.py`, `cifar_data.py` | the CIFAR-10 arm; loader reads the binary release in place |
+| `multigrid_pc.py`, `run_multigrid.py` | V-cycle inner solver and the work/rounds benchmark |
+| `eigvec_smoothness.py` | is the slow mode smooth along depth? (it is) |
+| `isometry_kappa.py`, `isometry_train.py` | conditioning vs signal distortion; no-skip isometric networks |
 | `make_figures.py` | regenerates every figure from `results/` |
+| `make_figure_ladder.py`, `make_figure_skip.py` | the rate-ladder and skip-strength figures |
 
 ## Five things worth knowing before reusing this
 

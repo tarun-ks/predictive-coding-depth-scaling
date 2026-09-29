@@ -1,0 +1,1 @@
+{"dataset": "cifar10", "depth": 16, "seed": 1, "method": "bp", "budget": 0, "width": 32, "state_lr": 0.21527727592255588, "lambda_max": 4.645172119140625, "learning_rate": 0.0014142135623730952, "train_subset": 50000, "test_acc": 0.3649, "finite": true, "wall_sec": 1.64}

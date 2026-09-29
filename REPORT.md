@@ -8,7 +8,7 @@ all dynamics are imported verbatim from `pcalm/`.
 - reference implementation: SakanaAI/pc-alm (MIT), arXiv 2605.31022
 - reproduction gate: Fashion-MNIST N=32 L=32 relu seed 0, T=2L -> BP 78.66% / PC 68.13% / PC-ALM 77.75%, matching the repo's published table exactly (0.00 pp on all three)
 - config: MNIST, residual MLP, width 32 (their default), relu, 1 epoch, batch 64, Adam lr = 1e-3*sqrt(W/L), gamma0=1, full 60k/10k split
-- `state_lr` (eta_h): paper's frozen eta_best_by_cell.csv at depths 8-128; depths 4 and 256 via the paper's own eta=1/lambda_max rule (calibrated power iteration). Fits are reported both over all depths and restricted to the frozen-table depths.
+- `state_lr` (eta_h): the reference implementation's frozen eta_best_by_cell.csv at depths 8-128; depths 4 and 256 via the reference implementation's own eta=1/lambda_max rule (calibrated power iteration). Fits are reported both over all depths and restricted to the frozen-table depths.
 - total training runs: **925**  |  residual cells: **70**  |  conv cells: **30**
 
 ## Headline caveats
@@ -20,7 +20,7 @@ all dynamics are imported verbatim from `pcalm/`.
    trained parameters, so "first T below tol" is either 1 or never, at every
    depth. PC is fully censored below; this is a property of the method, not a
    run failure.
-2. **PC-ALM has no fixed point in T** at the paper's defaults (alpha=1, rho=1,
+2. **PC-ALM has no fixed point in T** at the reference defaults (alpha=1, rho=1,
    inner_steps=1). Its gradient cosine to its own T=100k limit peaks near
    T~1024 then decays; duals grow without settling. It is censored in every
    convergence cell. PC-ALM is accurate at a *budget*, not in a limit.
@@ -61,7 +61,7 @@ log-log fit: `+1.252  [+1.114, +1.390]  R2=0.994  n=21/6d (clustered, df=4)`
 
 - PC restricted to paper-frozen eta depths: `+2.000  (residuals identically zero on 4 depth means; CI undefined, not infinitely precise)  n=20/4d`
 - PC seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 300% per depth step)
-- PCALM restricted to paper-frozen eta depths: `+1.200  [+1.008, +1.392]  R2=0.993  n=16/5d (clustered, df=3)`
+- PCALM restricted to paper-frozen eta depths: `+1.258  [+1.100, +1.417]  R2=0.995  n=25/5d (clustered, df=3)`  (recomputed from `results/t_target_bp_relative.csv` by `analysis/report.py`; an earlier value of +1.200 was from a superseded pipeline state)
 - PCALM seed-vs-depth: seed spread smaller than depth effect (median relative SD 0% vs 138% per depth step)
 
 ### Plateau / censoring audit
@@ -536,3 +536,55 @@ body rather than typing literals:
 
 A stale value then becomes a build failure or a diff. The pieces already exist:
 `analysis/report.py` and `analysis/refine_ttarget.py` compute every fit in the study.
+
+
+---
+
+## Additional experiments
+
+All scripts are external callers; `pcalm/` is unmodified. Run everything with the
+project virtualenv.
+
+### Residual-connection strength
+`analysis/skip_strength.py` -> `results/strengthen/skip_strength.jsonl`. Block
+`z_i = s_i f_i(z_{i-1}) + c z_{i-1}`, c in {0, 0.25, 0.5, 0.75, 1}, 6 depths x 3 seeds.
+kappa exponent: c=1 `+2.036 [+1.926, +2.146]`; every c<1 flat or falling. Every c<1
+network underflows float32 in the forward pass and is at chance under backpropagation.
+
+### Spectra to depth 512
+`results/strengthen/kappa_512.csv` (float64). Fit over L=4-512: `L^2.015 [1.973, 2.058]`.
+
+### Hopfield energy
+`analysis/kappa_family.py` -> `results/strengthen/kappa_hopfield.csv`. Activity Hessian
+indefinite at every depth 4-128, lambda_max + lambda_min = 2.00. No condition number.
+
+### Slow-mode smoothness
+`analysis/eigvec_smoothness.py` -> `results/strengthen/eigvec_smoothness.jsonl`.
+Envelope roughness ~ L^-0.871; linear-interpolation error 0.036 at L=128.
+
+### Inner-solve cost: steepest descent, Nesterov, multigrid
+`analysis/multigrid_pc.py`, `analysis/run_multigrid.py` ->
+`results/strengthen/multigrid*.jsonl`. L=8-256, reference minimum verified converged at
+two budgets 4x apart. Nesterov `L^0.996 [0.935, 1.056]`; steepest descent `L^1.817`;
+multigrid work `L^1.745`, rounds `L^2.425`. An unverified reference returns L^0.804 for
+Nesterov, below the Omega(L) floor. Gradient-norm tolerances are degenerate on this
+energy (the minimiser sits on a ReLU kink); use energy against a verified minimum.
+
+### CIFAR-10
+`analysis/cifar_data.py`, `analysis/run_cifar.py` -> `results/strengthen/cifar/`.
+PC `L^2.000` (exact, 5 depths), PC-ALM `L^1.258 [1.018, 1.499]`; every budget above the
+L-2 floor. With the +/-0.066 ladder systematic this does not exclude linear scaling.
+
+### Conditioning versus signal distortion
+`analysis/isometry_kappa.py`, `analysis/isometry_train.py` ->
+`results/strengthen/isometry_*.jsonl`. At the forward-pass point H = A^T A + B exactly.
+For any direction u with distortion D_u, kappa * D_u^2 >= n^2 / (pi^2 (1 + 2 beta/n));
+holds in all 132 positive-definite cells across 8 networks. Orthogonal linear network
+without a skip: kappa equals the closed-form Laplacian value (1604.9 at L=32, all seeds)
+and trains at every depth. The upper bound kappa <= ((1+J_max)^2+|B|) M^2 (n+1/2)^2
+needs B positive semidefinite; it fails only in 7 orthogonal-tanh cells, all with
+indefinite B.
+
+### Depth 256, PC
+`results/d256_ext/`. All three seeds reach 90% of depth-matched BP at T=12288; seeds 0
+and 1 stay above threshold at T=16384.
