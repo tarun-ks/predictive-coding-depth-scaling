@@ -1,5 +1,4 @@
-"""ITEM 3.2 (reviewer): does momentum on the activities move the depth exponent
-from 2 to 1?
+"""Does momentum on the activities move the depth exponent from 2 to 1?
 
 Same protocol as the headline PC sweep (MNIST, width 32, 1 epoch, same frozen eta
 table, same Adam rule, same batch order, same geometric budget ladder, T <= 4L), with
@@ -81,9 +80,13 @@ def main():
     root = Path(__file__).resolve().parents[1]
     L, W, BS = a.depth, a.width, 64
     spec = spectrum_by_depth(root)
-    if L not in spec:
+    if L in spec:
+        lmax, lmin, kappa = spec[L]
+    elif a.variant == "nag" and a.beta_from == "depth":
+        lmax = lmin = kappa = float("nan")        # not needed: beta comes from depth alone
+    else:
         raise SystemExit(f"no measured spectrum for depth {L}; run analysis/kappa.py first")
-    lmax, lmin, kappa = spec[L]
+    kappa_used = kappa
 
     eta, prov = eta_for_depths([L], dataset=a.dataset, activation=a.activation, width=W)
     slr_gd = eta[L]
@@ -95,6 +98,7 @@ def main():
             n = L - 1
             kappa_iso = math.cos(math.pi / (2 * n + 1)) ** 2 / math.sin(math.pi / (4 * n + 2)) ** 2
             beta, slr = beta_nag(kappa_iso), slr_gd
+            kappa_used = kappa_iso
         else:
             beta, slr = beta_nag(kappa), slr_gd      # step held fixed: only momentum changes
         beta = 1.0 - a.beta_gap_scale * (1.0 - beta)
@@ -148,6 +152,7 @@ def main():
             te_mse, te_ce, te_acc = evaluate(params, x_te, y_te, BS, eval_batch)
             row = dict(depth=L, width=W, seed=a.seed, method="pc", variant=a.variant,
                        budget=T, beta=beta, beta_gap_scale=a.beta_gap_scale, beta_from=a.beta_from,
+                       kappa_used_for_beta=kappa_used,
                        state_lr=slr, state_lr_gd=slr_gd,
                        state_lr_provenance=prov[L], lambda_max=lmax, lambda_min=lmin,
                        kappa=kappa, learning_rate=lr, dataset=a.dataset, epochs=1,

@@ -61,6 +61,7 @@ def run_sd(arr, energy, grad_e, hvp, target, maxit, cost, trace=None):
             return arr, e
         arr = arr - (float(jnp.sum(g * g)) / den) * g
         cost.charge(0, 2)
+        cost.reduce(arr.shape[0])
     return arr, float(energy(arr))
 
 
@@ -122,10 +123,11 @@ def run_mg(arr, energy, grad_e, hvp, sizes, target, maxcyc, nu, cost, smooth_ste
                     continue
                 arr = arr - (float(jnp.sum(d * g)) / den) * d
                 cost.charge(k, 2)
+                cost.reduce(arr.shape[0])
     return arr, float(energy(arr))
 
 
-def power_lmax(arr, hvp, iters=150, seed=0):
+def power_lmax(arr, hvp, iters=500, seed=0):
     v = jax.random.normal(jax.random.PRNGKey(seed), arr.shape)
     v = v / jnp.linalg.norm(v)
     lam = 0.0
@@ -150,8 +152,17 @@ def main():
     ap.add_argument("--ref-work", type=int, default=20000,
                     help="work budget used to estimate the reference minimum E*")
     ap.add_argument("--max-work", type=int, default=200000)
+    ap.add_argument("--estar-from", default="",
+                    help="comma-separated jsonl files from an earlier run; reuse their "
+                         "verified e_star per (depth, seed, ref_work) instead of recomputing")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    ESTAR = {}
+    for fn in [f for f in a.estar_from.split(",") if f]:
+        for l in open(fn):
+            if l.strip():
+                r = json.loads(l)
+                ESTAR[(r["depth"], r["seed"], r["ref_work"])] = r["e_star"]
     phi = jax.nn.relu
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     done = set()
@@ -185,23 +196,33 @@ def main():
                 lmax_meas = power_lmax(arr0, hvp)
                 smooth_step = 1.0 / lmax_meas if lmax_meas > 0 else 0.2
                 k_here = float(np.mean(kap.get(L, [max(1.0, L ** 2)])))
-                lmax, beta = 4.2, None
                 import math as _m
                 beta = (_m.sqrt(k_here) - 1) / (_m.sqrt(k_here) + 1)
 
-                # Reference minimum at two budgets a factor of four apart.
+                # Reference minimum at two budgets a factor of four apart. The energy is
+                # piecewise quadratic (ReLU), so none of these solvers is monotone near the
+                # minimum: steepest descent reaches its lowest point early and then wanders
+                # above it. E* is therefore the lowest energy ANY iterate of any reference
+                # run reached, not the final iterate, which makes it monotone in the budget.
                 estars = {}
                 for rw in (a.ref_work, 4 * a.ref_work):
+                    if (L, s_, rw) in ESTAR:
+                        estars[rw] = ESTAR[(L, s_, rw)]
+                        continue
                     best = e0
-                    for fn, kw in (("mg", {}), ("sd", {})):
-                        c = Cost()
+                    for fn in ("mg", "sd", "nag"):
+                        c, tr = Cost(), []
                         if fn == "mg":
                             _, e = run_mg(arr0, energy, grad_e, hvp, sizes, -1e30,
                                           rw // (2 * a.nu * (2 * len(sizes) - 1)), a.nu, c,
-                                          smooth_step)
+                                          smooth_step, trace=tr)
+                        elif fn == "sd":
+                            _, e = run_sd(arr0, energy, grad_e, hvp, -1e30, rw // 2, c,
+                                          trace=tr)
                         else:
-                            _, e = run_sd(arr0, energy, grad_e, hvp, -1e30, rw // 2, c)
-                        best = min(best, e)
+                            _, e = run_nag(arr0, energy, grad_e, (1.0 / lmax_meas) * a.batch, beta,
+                                           -1e30, rw, c, trace=tr)
+                        best = min([best, e] + [t[2] for t in tr])
                     estars[rw] = best
 
                 for rw, estar in estars.items():
@@ -213,7 +234,7 @@ def main():
                             _, e = run_sd(arr0, energy, grad_e, hvp, target,
                                           a.max_work // 2, cost)
                         elif solver == "nag":
-                            _, e = run_nag(arr0, energy, grad_e, (1.0 / lmax) * a.batch,
+                            _, e = run_nag(arr0, energy, grad_e, (1.0 / lmax_meas) * a.batch,
                                            beta, target, a.max_work, cost)
                         else:
                             _, e = run_mg(arr0, energy, grad_e, hvp, sizes, target,
@@ -225,6 +246,7 @@ def main():
                            lmax_measured=lmax_meas, smooth_step=smooth_step,
                                    e_reached=e, ref_work=rw,
                                    work=cost.work, rounds=cost.rounds,
+                                   reductions=cost.reductions,
                                    converged=bool(e <= target),
                                    per_level=cost.per_level,
                                    wall_sec=round(time.time() - t0, 2))

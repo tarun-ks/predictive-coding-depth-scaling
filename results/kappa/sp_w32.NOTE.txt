@@ -4,8 +4,8 @@ Standard-parameterization spectrum: why this file stops at L=32.
 This run requested depths 4,8,16,32,64. It completed 4-32 and aborted at L=64
 when the shifted-Lanczos solve failed to converge. The completed rows are in
 sp_w32.csv; the abort is recorded below rather than discarded, because the
-failure itself is reported in the paper (Table 7): under the standard
-parameterization lambda_min falls fast enough that it stops being resolvable.
+failure is itself a result: under the standard parameterization lambda_min falls
+fast enough that it stops being resolvable.
 
 L=64 was subsequently resolved in a separate run with a larger Krylov basis
 (ncv=200); see results/kappa/sp_64.csv. L=128 was not resolvable by any

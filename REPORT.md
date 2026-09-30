@@ -516,8 +516,8 @@ Every fitted value in the write-up is a hand-typed literal. Nothing connects a n
 in the `.tex` to the data it came from, so a value that was correct against an earlier
 state of the pipeline can silently stop being correct.
 
-This is not hypothetical. one restricted-depth PC-ALM fit once read
-`+1.200 [1.008, 1.392]` where the raw data gives `+1.259 [1.100, 1.417]`; every other
+This is not hypothetical. One restricted-depth PC-ALM fit once read
+`+1.200 [1.008, 1.392]` where the raw data gives `+1.258 [1.100, 1.417]` (1.25850); every other
 fit in that table reproduced to three or four decimals. It was caught by recomputing
 the whole table from `results/t_target_bp_relative.csv`, which is the only way this
 class of error can be caught: prose review cannot falsify a fitted value, only its
@@ -526,16 +526,17 @@ inputs can.
 All eight rows of that table have since been re-derived from raw data and match, and
 the same check is re-run after any edit that touches a number.
 
-**The durable fix, not yet implemented.** Emit every fitted value from the analysis
-scripts into a generated `numbers.tex` of `\newcommand`s, and cite those macros in the
-body rather than typing literals:
+**The fix.** `analysis/summary_numbers.py` recomputes every fitted exponent and summary
+statistic from `results/`, one function per group of results, and with `--check` compares
+each against its reference value at the precision it is reported:
 
-    % numbers.tex -- GENERATED, do not edit
-    \newcommand{\pcalmRestrictedSlope}{1.259}
-    \newcommand{\pcalmRestrictedCI}{[1.100, 1.417]}
+    .venv/bin/python analysis/summary_numbers.py --check
 
-A stale value then becomes a build failure or a diff. The pieces already exist:
-`analysis/report.py` and `analysis/refine_ttarget.py` compute every fit in the study.
+A stale value is then a MISMATCH line rather than a silent error. Its first run found
+thirteen, all corrected: rounding slips, fits quoted over a different depth range than
+stated, one censoring rule applied inconsistently, and a handful of values whose inputs
+had never been saved (now regenerated: `verify_linear.csv`, `output_curvature.csv`,
+`timing.csv` under `results/strengthen/`).
 
 
 ---
@@ -555,8 +556,20 @@ network underflows float32 in the forward pass and is at chance under backpropag
 `results/strengthen/kappa_512.csv` (float64). Fit over L=4-512: `L^2.015 [1.973, 2.058]`.
 
 ### Hopfield energy
-`analysis/kappa_family.py` -> `results/strengthen/kappa_hopfield.csv`. Activity Hessian
-indefinite at every depth 4-128, lambda_max + lambda_min = 2.00. No condition number.
+`analysis/kappa_family.py`, `analysis/hopfield_chain.py`. Activity Hessian I - (C + C^T).
+  * residual connection carried in as a unit coupling (`kappa_hopfield.csv`): indefinite
+    at every depth 4-128, lambda_max + lambda_min = 2.00.
+  * on the orthogonal no-skip networks that carry a signal and train
+    (`kappa_hopfield_orth.csv`): indefinite at every depth; for the linear one
+    lambda_min = 1 - 2cos(pi/(n+1)).
+  * on the reference weights without the skip (`kappa_hopfield_noskip.csv`): positive
+    definite, kappa FALLING from 35 at L=4 to 1.5 at L=128, like no-skip PC on the same
+    weights, whose forward signal has underflowed by L=32.
+  * linear chain of orthogonal layers with gain g, exact: eigenvalues
+    1 - 2g cos(k pi/(n+1)); indefinite above g ~ 1/2, geometrically decaying response
+    below it, and at g = 1/2 half the path Laplacian, kappa = cot^2(pi/(2n+2)) = Theta(n^2)
+    (`hopfield_chain.csv`).
+So the Hopfield energy is indefinite wherever a signal crosses depth.
 
 ### Slow-mode smoothness
 `analysis/eigvec_smoothness.py` -> `results/strengthen/eigvec_smoothness.jsonl`.
@@ -564,11 +577,39 @@ Envelope roughness ~ L^-0.871; linear-interpolation error 0.036 at L=128.
 
 ### Inner-solve cost: steepest descent, Nesterov, multigrid
 `analysis/multigrid_pc.py`, `analysis/run_multigrid.py` ->
-`results/strengthen/multigrid*.jsonl`. L=8-256, reference minimum verified converged at
-two budgets 4x apart. Nesterov `L^0.996 [0.935, 1.056]`; steepest descent `L^1.817`;
-multigrid work `L^1.745`, rounds `L^2.425`. An unverified reference returns L^0.804 for
-Nesterov, below the Omega(L) floor. Gradient-norm tolerances are degenerate on this
-energy (the minimiser sits on a ReLU kink); use energy against a verified minimum.
+`results/strengthen/multigrid/`. L=8-256, three seeds, cost to 99% of the achievable
+energy reduction. Rounds charge a level-k operation 2^k hops and each exact line search a
+global reduction, 2(n-1) hops; Nesterov (fixed step) needs none.
+
+  steepest descent   work   L^1.792 [1.699, 1.885]   rounds L^2.825 [2.733, 2.918]
+  Nesterov           work = rounds   L^0.964 [0.829, 1.100]
+  multigrid          work   L^1.289 [0.729, 1.849]   rounds L^2.428 [1.753, 3.102]
+
+The energy is piecewise quadratic and not convex away from the forward pass, and no
+solver is monotone near its minimum (`analysis/estar_wander.py`: steepest descent reaches
+its lowest point partway through and then wanders above it). E* is therefore the lowest
+energy any iterate of any reference run (sd, nag, mg) reached. 20k and 80k reference
+budgets agree to < 1e-4 of the gap in 17 of 18 seed-depth cells; in the last (L=64, seed
+2) the longer run finds a deeper basin and 80k agrees with 320k instead
+(`multigrid/checks/`). A depth where a seed ends in a higher basin is censored for that
+solver: steepest descent at L=64, multigrid at L=128. Multigrid costs 5-17x Nesterov's
+work at every uncensored depth. Gradient-norm tolerances are degenerate on this energy
+(the minimiser sits on a ReLU kink); use energy against a verified minimum.
+
+### Weight-gradient budget of the inner solve
+`analysis/gradient_tax.py` -> `results/strengthen/gradient_tax_{nag,gd}.jsonl`. Iterations
+until the weight gradient stays within 10% of its converged value over [t, 2t], at init,
+batch 64; each layer group's reference checked converged to < delta/3.
+  Nesterov, L=4-512: whole network `L^1.002 [0.906, 1.098]`, t/sqrt(kappa) 2.0-3.1;
+  input layer `L^1.059`, output-side hidden quarter `L^1.147`, read-out `L^1.207`
+  (the last two fall to 1.09 and 1.08 over L=16-512).
+  Gradient descent, L=4-64: `L^1.985 [1.722, 2.249]`.
+
+### Conditioning at trained weights
+`analysis/kappa_trained.py`, `analysis/kappa_trained_traj.py` ->
+`results/strengthen/kappa_trained*.csv`. PC-ALM trained by the reference pipeline;
+kappa at 0/10/25/50/75/100% of the epoch. Depth exponent over L=4-256: 2.024 at init,
+2.04-2.06 at every later stage, 2.051 [1.943, 2.159] at the end; per-depth growth 1.1-1.5x.
 
 ### CIFAR-10
 `analysis/cifar_data.py`, `analysis/run_cifar.py` -> `results/strengthen/cifar/`.

@@ -23,8 +23,9 @@ was altered; every measurement is taken by an external caller.
 | …with the residual connection weakened (any c < 1) | flat or falling in depth; forward pass underflows |
 | PC inference budget, CIFAR-10 | L<sup>2.000</sup> (exact, 5 depths) |
 | PC-ALM inference budget, CIFAR-10 | L<sup>1.258</sup>, CI [1.018, 1.499] |
-| Inner solve only, spectrum-set Nesterov | L<sup>0.996</sup>, CI [0.935, 1.056] = the Omega(L) floor |
-| Inner solve only, multigrid V-cycle | work L<sup>1.745</sup>, rounds L<sup>2.425</sup> |
+| Inner solve only, spectrum-set Nesterov | L<sup>0.964</sup>, CI [0.829, 1.100] = the Omega(L) floor |
+| Inner solve only, multigrid V-cycle | work L<sup>1.29</sup>, rounds L<sup>2.43</sup>; 5-17x Nesterov's work |
+| Hopfield-type energy | indefinite wherever a signal crosses depth |
 | Conditioning x squared signal distortion | >= (n/pi)<sup>2</sup>, holds in all 132 measured cells |
 | …repeated with 8 inputs per seed | κ ~ L<sup>2.036</sup>, CI [1.955, 2.116] |
 | …on a convolutional stack | κ ~ L<sup>2.228</sup>, CI [1.929, 2.526] |
@@ -79,7 +80,7 @@ python -m analysis.validate_generic
 | `item1/` | per-layer gradient alignment against backpropagation |
 | `robust/` | dataset, width and epoch robustness conditions |
 | `conv/`, `conv2/` | convolutional variant; spectra usable, training discarded |
-| `strengthen/` | depth-512 spectra, skip-strength sweep, Hopfield-energy spectra |
+| `strengthen/` | depth-512 spectra, skip-strength sweep, Hopfield-energy spectra, inner-solve benchmark, gradient budget, trained-weight spectra |
 | `alpha/`, `item2/`, `task2/`, `task3/`, `resid/`, `reconcile/` | dual step-size sweep, freezing intervention, exploratory metrics |
 
 ### Key scripts
@@ -107,7 +108,13 @@ python -m analysis.validate_generic
 | `log_correction_fit.py` | power law vs linear-with-log-correction, by AICc |
 | `run_momentum.py --beta-from depth` | Nesterov with momentum set from depth alone |
 | `make_figures.py` | regenerates every figure from `results/` |
-| `make_figure_ladder.py`, `make_figure_skip.py` | the rate-ladder and skip-strength figures |
+| `make_figure_ladder.py`, `make_figure_skip.py`, `make_figure_solvers.py` | the rate-ladder, skip-strength and inner-solve figures |
+| `summary_numbers.py` | recomputes every fitted exponent and summary statistic from `results/`; `--check` compares each with its reference value |
+| `hopfield_chain.py` | exact spectrum of the Hopfield energy on a linear orthogonal chain |
+| `kappa_trained_traj.py` | activity-Hessian spectrum at fixed fractions of training |
+| `output_curvature.py` | eigenvalues of the output-loss block where the upper conditioning bound fails |
+| `estar_wander.py` | why the reference minimum is the lowest iterate, not the last |
+| `timing_probe.py` | wall-clock cost per inner iteration, PC-ALM against PC |
 
 ## Five things worth knowing before reusing this
 

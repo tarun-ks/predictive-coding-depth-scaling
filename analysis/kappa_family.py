@@ -1,6 +1,6 @@
 """Activity-Hessian conditioning across three layer-local energies.
 
-The paper measures kappa ~ L^2 for the predictive-coding energy. That energy is
+The predictive-coding energy has kappa ~ L^2 (analysis/kappa.py). That energy is
 a sum of squared layerwise residuals, so its Hessian carries the A^T A structure
 of a discrete derivative. Two questions follow, and neither is answered by the
 PC measurement alone:
@@ -130,8 +130,16 @@ if __name__ == "__main__":
     for fam in a.families.split(","):
         for L in [int(d) for d in a.depths.split(",")]:
             # pc_noskip removes the residual connection; everything else is held.
-            sk = tuple([False] * L) if fam == "pc_noskip" else skip_mask(L)
-            base = "hopfield" if fam == "hopfield" else "pc"
+            # "hopfield" carries the residual connection INTO the Hopfield energy as a
+            # unit-strength coupling between adjacent layers, which on its own gives a
+            # spectrum 1 - 2 cos(theta), i.e. indefinite. "hopfield_noskip" is the form
+            # equilibrium propagation uses, with inter-layer coupling through the weights only.
+            # On the reference weights that coupling shrinks as L^-1/2 and the forward signal
+            # dies, so "*_orth_linear" / "*_orth_tanh" repeat both energies on the no-skip
+            # orthogonal networks of isometry_kappa.py, which carry a signal and train.
+            sk = tuple([False] * L) if fam in ("pc_noskip", "hopfield_noskip") else skip_mask(L)
+            base = "hopfield" if fam.startswith("hopfield") else "pc"
+            orth_act = fam.rsplit("_", 1)[1] if "_orth_" in fam else None
             for s in [int(z) for z in a.seeds.split(",")]:
                 xt, yt, _, _ = load_dataset("mnist", train_subset=8, test_subset=8,
                                             seed=s, data_dir="data",
@@ -144,6 +152,11 @@ if __name__ == "__main__":
                 x, y = jnp.asarray(xt[0:1]), jnp.asarray(yt[0:1])
                 if os.environ.get("KAPPA_X64") == "1":
                     x, y = jnp.asarray(x, jnp.float64), jnp.asarray(y, jnp.float64)
-                hvp, n = hvp_for(base, params, sc, sk, x, y, phi, a.beta)
+                phi_f = phi
+                if orth_act is not None:
+                    from analysis.isometry_kappa import build as iso_build
+                    params, sc, sk = iso_build(L, s, "orth", orth_act, 1.0, width=a.width)
+                    phi_f = activation_fn(orth_act)
+                hvp, n = hvp_for(base, params, sc, sk, x, y, phi_f, a.beta)
                 lmax, lmin, k, n = spectrum_of(hvp, n)
                 print(f"{fam},{L},{s},{lmax:.6f},{lmin:.10f},{k:.3f},{n}", flush=True)

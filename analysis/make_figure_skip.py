@@ -18,7 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-OUT = Path("../paper_nn/figures"); OUT.mkdir(parents=True, exist_ok=True)
+OUT = Path("figures"); OUT.mkdir(parents=True, exist_ok=True)
 plt.rcParams.update({"font.size": 9, "axes.grid": True, "grid.alpha": .3,
                      "figure.dpi": 150, "savefig.bbox": "tight",
                      "axes.spines.top": False, "axes.spines.right": False})

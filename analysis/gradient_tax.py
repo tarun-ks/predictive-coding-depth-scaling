@@ -7,8 +7,18 @@ solve directly, at initialisation, with no outer loop: how many iterations until
 GRADIENT the inner solve produces is within delta of its converged value, overall and for
 the input-side and output-side quarters of the network separately?
 
-Reference: the gradient after a long Nesterov run, verified converged by requiring that a
-further 50% more iterations move it by less than 1e-4 relative.
+Reference: the gradient after a long run. Its convergence is checked PER GROUP, by how far
+a further 50% more iterations move that group's gradient; a group's budget at delta is
+only trusted when that movement is below delta/3.
+
+The budget is a HOLD-WINDOW crossing, as in the main sweep: the first grid point t at
+which the relative error stays at or below delta for every grid point in [t, 2t]. An
+accelerated solver oscillates, so a first crossing can record a transient dip; the
+first crossing is stored alongside for comparison, not used.
+
+Groups: the whole network; the input layer W_0 on its own (it has 784 x 32 entries,
+25x any hidden matrix, and would dominate any group it joins); the first and last
+quarter of the HIDDEN matrices; and the read-out layer.
 Solvers descend pcalm.inference's own energy; the weight gradient is jax.grad of that
 energy in the parameters at fixed activities, which is PC's update with zero duals.
 """
@@ -102,21 +112,26 @@ def main():
 
                 def flat(g): return jnp.concatenate([t.ravel() for t in g])
                 nL = len(params)
-                q = max(1, nL // 4)
-                groups = {"all": list(range(nL)), "input": list(range(0, q)),
-                          "output": list(range(nL - q, nL))}
+                hid = list(range(1, nL - 1))
+                q = max(1, len(hid) // 4)
+                groups = {"all": list(range(nL)), "input_layer": [0],
+                          "input_hidden": hid[:q], "output_hidden": hid[-q:],
+                          "readout": [nL - 1]}
                 def gsub(g, idx): return jnp.concatenate([g[i].ravel() for i in idx])
 
                 # reference: long run, verified converged
                 unit = int(math.ceil(math.sqrt(kap))) if a.solver == "nag" else int(math.ceil(kap))
-                Tref = max(2000, (60 if a.solver == "nag" else 40) * unit)
+                Tref = max(2000, (80 if a.solver == "nag" else 40) * unit)
                 st = (f0, f0); st = run(st, Tref); g1 = gw(st[0])
                 st = run(st, Tref // 2); g2 = gw(st[0])
                 conv = float(jnp.linalg.norm(flat(g2) - flat(g1)) / jnp.linalg.norm(flat(g2)))
                 ginf = g2
+                def gsub_(g, idx): return jnp.concatenate([g[i].ravel() for i in idx])
+                conv_g = {k: float(jnp.linalg.norm(gsub_(g2, v) - gsub_(g1, v))
+                                   / jnp.linalg.norm(gsub_(g2, v))) for k, v in groups.items()}
 
                 # trajectory on a geometric grid
-                grid = sorted({int(round(v)) for v in np.geomspace(1, Tref, 90)})
+                grid = sorted({int(round(v)) for v in np.geomspace(1, Tref, 160)})
                 st = (f0, f0); t_prev = 0; traj = []
                 g0 = gw(f0)
                 def rho(g, idx):
@@ -128,16 +143,28 @@ def main():
                     st = run(st, t - t_prev); t_prev = t
                     traj.append((t, {k: rho(gw(st[0]), v) for k, v in groups.items()}))
                 first = lambda k, dl: next((t for t, r in traj if r[k] <= dl), None)
+                def held(k, dl):
+                    for i, (t, r) in enumerate(traj):
+                        if t == 0 or r[k] > dl:
+                            continue
+                        win = [rr[k] for tt, rr in traj[i:] if tt <= 2 * t]
+                        if all(x <= dl for x in win):
+                            return t
+                    return None
+                DL = (0.3, 0.1, 0.03, 0.01)
                 row = dict(depth=L, seed=s, solver=a.solver, batch=a.batch, kappa=kap,
                            lambda_max=lm, beta=beta, T_ref=Tref, ref_converged_rel=conv,
-                           t_delta={k: {str(dl): first(k, dl) for dl in (0.3, 0.1, 0.03, 0.01)}
-                                    for k in groups},
-                           rho0={k: v for k, v in traj[0][1].items()},
+                           ref_converged_group=conv_g,
+                           t_delta={k: {str(dl): held(k, dl) for dl in DL} for k in groups},
+                           t_first={k: {str(dl): first(k, dl) for dl in DL} for k in groups},
+                           trajectory=[[t, r] for t, r in traj],
                            wall_sec=round(time.time() - t0, 1))
                 fh.write(json.dumps(row) + "\n"); fh.flush()
                 print(f"[{a.solver} L={L} s={s}] conv={conv:.1e} "
-                      f"t(0.1): all={row['t_delta']['all']['0.1']} in={row['t_delta']['input']['0.1']} "
-                      f"out={row['t_delta']['output']['0.1']} ({row['wall_sec']}s)", flush=True)
+                      f"t(0.1) held: all={row['t_delta']['all']['0.1']} "
+                      f"in_hid={row['t_delta']['input_hidden']['0.1']} "
+                      f"in_layer={row['t_delta']['input_layer']['0.1']} "
+                      f"first all={row['t_first']['all']['0.1']} ({row['wall_sec']}s)", flush=True)
 
 
 if __name__ == "__main__":
