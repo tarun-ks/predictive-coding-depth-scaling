@@ -23,7 +23,7 @@ CPC, CALM, CTH, CFL = "#0072B2", "#D55E00", "#666666", "#009E73"
 ROWS = [
     ("$\\kappa$, conditioning\n(kappa.py, $L\\!=\\!4$–$256$)", 2.024, 1.953, 2.095, "measured", CTH),
     ("$\\Theta(\\kappa)$: unaccelerated rate\nimplied by $\\kappa=\\Theta(L^2)$", 2.02, None, None, "theory", CTH),
-    ("PC, measured budget\n(run_sweep.py)", 1.916, 1.782, 2.050, "measured", CPC),
+    ("PC, measured budget\n(run_sweep.py)", 2.000, 1.848, 2.152, "measured", CPC),
     ("PC-ALM, measured budget\n(refine_ttarget.py)", 1.208, 1.175, 1.241, "measured", CALM),
     ("Nesterov on PC, measured\n(run_momentum.py)", 1.213, 1.156, 1.271, "measured", CALM),
     ("$\\Theta(\\sqrt{\\kappa})$: ideally accelerated\nrate on the same $\\kappa$", 1.01, None, None, "theory", CTH),

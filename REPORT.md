@@ -586,5 +586,5 @@ needs B positive semidefinite; it fails only in 7 orthogonal-tanh cells, all wit
 indefinite B.
 
 ### Depth 256, PC
-`results/d256_ext/`. All three seeds reach 90% of depth-matched BP at T=12288; seeds 0
-and 1 stay above threshold at T=16384.
+`results/d256_ext/`. All three seeds reach 90% of depth-matched BP at T=12288 and stay
+above threshold at T=16384. PC fit over L=4-256: `+2.000  [+1.848, +2.152]  n=33/7d`.
