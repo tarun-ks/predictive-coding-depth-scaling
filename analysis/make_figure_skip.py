@@ -65,7 +65,9 @@ axes[2].set_xlabel("depth $L$"); axes[2].set_ylabel("BP test accuracy (\\%)")
 axes[2].set_ylim(0, 100)
 axes[2].set_title("(c) trainability", fontsize=9, loc="left")
 
-axes[0].legend(fontsize=7, loc="upper left", framealpha=.95)
-fig.tight_layout()
+handles, labels = axes[0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=len(cs), fontsize=7.5,
+           frameon=False, bbox_to_anchor=(0.5, -0.01))
+fig.tight_layout(rect=(0, 0.07, 1, 1))
 fig.savefig(OUT / "fig_skip.pdf", dpi=600)
 print("wrote", OUT / "fig_skip.pdf", "from", len(R), "runs")

@@ -466,10 +466,10 @@ def headline_fits(quiet=False):
     say("CI width, coarse -> refined, L=4-256",
         f"{out['alm7_width']:.3f} -> {out['ref7_width']:.3f} (half-width {out['ref7_half']:.3f})")
     for name, (det, _) in (("pc", pc), ("alm", alm), ("ref", ref)):
-        r = {L: _mean(det[L]) / (L - 2) for L in det}
+        r = {L: _mean(det[L]) / (L - 1) for L in det}      # floor: h_1 first moves at t = L-1
         out[f"{name}_floor_ratio"] = r
         out[f"{name}_floor_min"], out[f"{name}_floor_max"] = min(r.values()), max(r.values())
-        say(f"{name}: T_target / (L - 2) per depth", {L: round(v, 2) for L, v in r.items()})
+        say(f"{name}: T_target / (L - 1) per depth", {L: round(v, 2) for L, v in r.items()})
     out["pc_floor_L8"], out["pc_floor_L128"] = out["pc_floor_ratio"][8], out["pc_floor_ratio"][128]
     return out
 
@@ -625,11 +625,11 @@ def cifar(quiet=False):
         f = loglog_fit(list(T), list(T.values()))
         _put(out, m, f)
         out[f"{m}_T"] = [round(T[L]) for L in sorted(T)]
-        out[f"{m}_floor_min"] = min(T[L] / (L - 2) for L in T)
+        out[f"{m}_floor_min"] = min(T[L] / (L - 1) for L in T)
         say(f"{m}: T_target (hold window), L=4-64", out[f"{m}_T"])
         say(f"{m}: depth exponent", _fmt(f))
-    out["pc_floor_L64"] = P.TCpc[64] / 62
-    say("smallest T / (L - 2), PC / PC-ALM; PC at L=64",
+    out["pc_floor_L64"] = P.TCpc[64] / 63
+    say("smallest T / (L - 1), PC / PC-ALM; PC at L=64",
         f"{out['pc_floor_min']:.2f} / {out['alm_floor_min']:.2f}; {out['pc_floor_L64']:.1f}")
     out["alm_lo_net"] = out["alm_lo"] - grid_systematic(quiet=True)["pcalm_half_range"]
     say("PC-ALM lower edge net of the grid systematic", f"{out['alm_lo_net']:.3f}")
@@ -680,10 +680,12 @@ def momentum(quiet=False):
     say("depth-set vs spectrum-set beta, identical T_target", f"{same} of {tot} seed-depth cells")
 
     h = headline_fits(quiet=True)
-    out["nag_minus_ref7"] = out["nag"] - h["ref7"]
-    out["ref7_inside_nag"] = bool(out["nag_lo"] <= h["ref7_lo"] and h["ref7_hi"] <= out["nag_hi"])
-    say("NAG minus refined PC-ALM exponent",
-        f"{out['nag_minus_ref7']:+.3f}; PC-ALM interval inside: {out['ref7_inside_nag']}")
+    # like for like: Nesterov was run over six depths (4-128), so compare with PC-ALM's
+    # refined fit over the same six depths, not the seven-depth headline
+    out["ref6_minus_nag"] = h["ref6"] - out["nag"]
+    out["ref6_inside_nag"] = bool(out["nag_lo"] <= h["ref6_lo"] and h["ref6_hi"] <= out["nag_hi"])
+    say("refined PC-ALM (L=4-128) minus NAG exponent",
+        f"{out['ref6_minus_nag']:+.3f}; PC-ALM interval inside: {out['ref6_inside_nag']}")
     k = kappa_spectrum(quiet=True)["kappa"]
     out["accelerated_prediction"] = k / 2
     say("ideal accelerated exponent, half the kappa exponent", f"{k / 2:.3f}")
@@ -775,7 +777,7 @@ def measurement_checks(quiet=False):
     out["conv_bp_drop"] = cm(8) - cm(32)
     b = budget_ladder(quiet=True)
     out["mlp_bp_drop"] = b["bp_L8"] - b["bp_L32"]
-    say("conv stack at L=32: mean T_target PC / PC-ALM (floor 30)",
+    say("conv stack at L=32: mean T_target PC / PC-ALM (floor L-1 = 31)",
         f"{out['conv_pc_L32']:.1f} / {out['conv_alm_L32']:.1f}")
     say("BP accuracy drop L=8 -> 32, conv / residual MLP (pp)",
         f"{out['conv_bp_drop']:.2f} / {out['mlp_bp_drop']:.2f}")
@@ -890,6 +892,47 @@ def mechanisms(quiet=False):
     say("PC-ALM accuracy peak, L=32-128, in units of T=2L / mean drop by end of ladder (pp)",
         f"{out['peak_over_knee_min']:.0f}-{out['peak_over_knee_max']:.0f} / "
         + ", ".join(f"L={L}: {_mean(v):.2f}" for L, v in drops.items()))
+    return out
+
+
+def width_and_networks(quiet=False):
+    """Width dependence of kappa, and the eight-network test of the conditioning theorems."""
+    say, out = _say(quiet, "kappa against width; the eight networks"), {}
+    for w, fn in ((256, "kappa/mup_w256.csv"), (1024, "kappa/mup_w1024.csv")):
+        R = [r for r in csv.DictReader(open(RES / fn))]
+        f = loglog_fit([int(r["depth"]) for r in R], [float(r["kappa"]) for r in R])
+        out[f"w{w}"], out[f"w{w}_depths"] = f["slope"], f["n_depths"]
+        out[f"w{w}_L64"] = _mean([float(r["kappa"]) for r in R if int(r["depth"]) == 64])
+        say(f"width {w}: kappa vs depth / kappa at L=64", f"{_fmt(f)} / {out[f'w{w}_L64']:.0f}")
+    out["w32_L64"] = _mean([float(r["kappa"]) for r in csv.DictReader(open(RES / "kappa/standard_w32.csv"))
+                            if int(r["depth"]) == 64])
+    rows = _jsonl("strengthen/isometry_[abr]*.jsonl")
+    arm = lambda a, act, g: [r for r in rows if r["arm"] == a and r["act"] == act and r["gain"] == g]
+    for key, (a, act, g) in {"orth_relu": ("orth", "relu", 1.0), "gauss_relu": ("gauss", "relu", 1.0),
+                             "orth_tanh": ("orth", "tanh", 1.0), "reference": ("reference", "relu", 1.0),
+                             "contract_relu": ("orth", "relu", 0.8)}.items():
+        rs = [r for r in arm(a, act, g) if math.isfinite(r["kappa"])]
+        out[f"{key}_slope"] = loglog_fit([r["depth"] for r in rs], [r["kappa"] for r in rs])["slope"]
+    out["distorted_faster_than_L2"] = out["orth_relu_slope"] > 2 and out["gauss_relu_slope"] > 2
+    out["contract_relu_far_below_L2"] = out["contract_relu_slope"] < 1.5
+    pdd = sorted({r["depth"] for r in arm("orth", "tanh", 1.2) if math.isfinite(r["kappa"])})
+    out["expansive_indefinite_from"] = min(r["depth"] for r in arm("orth", "tanh", 1.2)
+                                           if not math.isfinite(r["kappa"]))
+    tr = _jsonl("strengthen/isometry_train.jsonl")
+    def fails_by(a, act, g):
+        by = {}
+        for r in tr:
+            if (r["arm"], r["act"], r["gain"]) == (a, act, g):
+                by.setdefault(r["depth"], []).append(r["bp_test_acc"])
+        return min(L for L, v in by.items() if _mean(v) < 0.25)
+    out["orth_relu_fails_by"], out["contract_tanh_fails_by"] = (fails_by("orth", "relu", 1.0),
+                                                              fails_by("orth", "tanh", 0.8))
+    say("kappa exponents: reference / orth tanh / orth ReLU / Gaussian ReLU / contractive ReLU",
+        " / ".join(f"{out[k + '_slope']:.2f}" for k in
+                   ("reference", "orth_tanh", "orth_relu", "gauss_relu", "contract_relu")))
+    say("orthogonal ReLU / contractive tanh fall below 25% accuracy by L; expansive tanh "
+        "indefinite from L", f"{out['orth_relu_fails_by']} / {out['contract_tanh_fails_by']}; "
+        f"{out['expansive_indefinite_from']} (positive definite at {pdd})")
     return out
 
 
@@ -1027,7 +1070,7 @@ def trained_kappa(quiet=False):
 GROUPS = (kappa_spectrum, step_size_offsets, skip_strength, isometry, budget_ladder,
           threshold_fits, headline_fits, grid_systematic, log_correction, gradient_alignment,
           robustness, cifar, momentum, prefactors, measurement_checks, hopfield, mechanisms,
-          timing, solvers, gradient_tax, trained_kappa)
+          width_and_networks, timing, solvers, gradient_tax, trained_kappa)
 
 
 # ------------------------------------------------------------------------ --check
@@ -1084,8 +1127,8 @@ EXPECTED = {
     "headline_fits.ref7": "1.208", "headline_fits.ref7_lo": "1.175",
     "headline_fits.ref7_hi": "1.241", "headline_fits.ref7_r2": "0.999",
     "headline_fits.alm7_width": "0.142", "headline_fits.ref7_width": "0.067",
-    "headline_fits.ref7_half": "0.033", "headline_fits.pc_floor_L8": "1.3",
-    "headline_fits.pc_floor_L128": "16.3", "headline_fits.alm_floor_min": "1.1",
+    "headline_fits.ref7_half": "0.033", "headline_fits.pc_floor_L8": "1.1",
+    "headline_fits.pc_floor_L128": "16.1", "headline_fits.alm_floor_min": "1.0",
     "headline_fits.alm_floor_max": "2.0",
     "grid_systematic.pcalm_span_lo": "1.234", "grid_systematic.pcalm_span_hi": "1.366",
     "grid_systematic.pc_span_lo": "1.990", "grid_systematic.pc_span_hi": "2.097",
@@ -1117,7 +1160,7 @@ EXPECTED = {
     "cifar.batch_estimator_mean_offset": "3.5",
     "momentum.gd": "1.916", "momentum.gd_lo": "1.782", "momentum.gd_hi": "2.050",
     "momentum.nag": "1.213", "momentum.nag_lo": "1.156", "momentum.nag_hi": "1.271",
-    "momentum.nag_minus_ref7": "0.005", "momentum.ref7_inside_nag": True,
+    "momentum.ref6_minus_nag": "0.013", "momentum.ref6_inside_nag": True,
     "momentum.depthbeta": "1.216", "momentum.depthbeta_lo": "1.156",
     "momentum.depthbeta_hi": "1.276", "momentum.depthbeta_same": "16",
     "momentum.depthbeta_cells": "18", "momentum.kiso_min": "2.3", "momentum.kiso_max": "3.1",
@@ -1146,7 +1189,7 @@ EXPECTED = {
     "mechanisms.fluct_ratio_min": "0.49", "mechanisms.fluct_ratio_max": "0.63",
     "mechanisms.decay_ratio_L64": "27", "mechanisms.resid_fall_min": "3",
     "mechanisms.resid_fall_max": "6", "mechanisms.freeze_input_L64": "1.77",
-    "mechanisms.freeze_none_L64": "2.04", "mechanisms.peak_over_knee_min": "2",
+    "mechanisms.freeze_none_L64": "2.04", "mechanisms.freeze_output_L64": "0.92", "mechanisms.peak_over_knee_min": "2",
     "mechanisms.peak_over_knee_max": "3", "mechanisms.drop_mean_min": "2.7",
     "mechanisms.drop_mean_max": "4.2",
     "measurement_checks.lin_cos_16384": "0.9997", "measurement_checks.relu_cos_1024": "0.956",
@@ -1175,6 +1218,16 @@ EXPECTED = {
     "trained_kappa.frac1_lo": "1.943", "trained_kappa.frac1_hi": "2.159",
     "trained_kappa.during_min": "2.04", "trained_kappa.during_max": "2.06",
     "trained_kappa.growth_min": "1.1", "trained_kappa.growth_max": "1.5",
+    "width_and_networks.w256": "2.18", "width_and_networks.w1024": "2.19",
+    "width_and_networks.w256_depths": "3", "width_and_networks.w1024_depths": "3",
+    "width_and_networks.w32_L64": "17872", "width_and_networks.w256_L64": "22082",
+    "width_and_networks.w1024_L64": "22818", "width_and_networks.reference_slope": "2.05",
+    "width_and_networks.orth_tanh_slope": "2.16",
+    "width_and_networks.distorted_faster_than_L2": True,
+    "width_and_networks.contract_relu_far_below_L2": True,
+    "width_and_networks.expansive_indefinite_from": "32",
+    "width_and_networks.orth_relu_fails_by": "64", "width_and_networks.contract_tanh_fails_by": "32",
+    "momentum.beta_gap_max_rung_shift": "0",
     "timing.ratio_L32": "2.7", "timing.ratio_deep_min": "1.6", "timing.ratio_deep_max": "1.8",
     "timing.alm_pc_equiv_L128": "3.6e2", "timing.alm_advantage_L128": "5.7",
 }
