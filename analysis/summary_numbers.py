@@ -336,14 +336,16 @@ def isometry(quiet=False):
     T = _jsonl("strengthen/isometry_train.jsonl")
     arm = lambda r: (r["arm"], r["act"], r["gain"])
     pd = [r for r in R if r["kappa"] is not None and np.isfinite(r["kappa"]) and r["lambda_min"] > 0]
-    lower = lambda r: r["n"] ** 2 / (math.pi ** 2 * (1 + 2 * r["beta"] / r["n"]))
+    # Theorem 1 with the test vector sin(pi (k-1)/(n-1)), which vanishes at both ends so the
+    # output block drops out: kappa D_u^2 >= (n-1)^2 / pi^2 for n >= 3
+    lower = lambda r: (r["n"] - 1) ** 2 / math.pi ** 2
     ok1 = [r for r in pd if r["kappa"] * r["distortion"] ** 2 >= lower(r) * (1 - 1e-9)]
     bad2 = [r for r in pd if r["kappa"] > r["kappa_upper"] * (1 + 1e-6)]
     out.update(n_arms=len({arm(r) for r in R}), n_cells=len(R), n_pd=len(pd),
                lower_holds=len(ok1), upper_fails=len(bad2),
                upper_fail_arms=sorted({f"{a}:{b}:{g:g}" for a, b, g in map(arm, bad2)}))
     say("arms / cells / positive-definite cells", f"{out['n_arms']} / {out['n_cells']} / {out['n_pd']}")
-    say("kappa D_u^2 >= n^2 / (pi^2 (1 + 2 beta / n)) holds in",
+    say("kappa D_u^2 >= (n-1)^2 / pi^2 holds in",
         f"{out['lower_holds']} of {out['n_pd']} positive-definite cells")
     say("upper bound exceeded in", f"{out['upper_fails']} cells, arms {out['upper_fail_arms']} "
         "(lambda_min of the output block is not stored, so B >= 0 cannot be checked here)")
@@ -723,12 +725,27 @@ def prefactors(quiet=False):
     """Prefactors anchored at L=128 and their extrapolation to L=1000."""
     say, out = _say(quiet, "prefactors and extrapolation"), {}
     h = headline_fits(quiet=True)
-    pc_T = _mean(_t_targets(_curves(("sweep",), "pc"), _rel(FRAC), depths={128})[0][128])
+    pcd = _t_targets(_curves(("sweep", "d256", "d256_ext"), "pc"), _rel(FRAC))[0]
+    with _at_root():
+        refd = _t_targets(load_curves(set(DEPTHS7), "pcalm"), _rel(FRAC))[0]
+    pc_T = _mean(pcd[128])
     out["pc_a"] = pc_T / 128 ** h["pc7"]
     out["alm_a"] = _gmean(h["ref_L128_T"]) / 128 ** h["ref7"]
     out["pc_1000"] = out["pc_a"] * 1000 ** h["pc7"]
     out["alm_1000"] = out["alm_a"] * 1000 ** h["ref7"]
     out["ratio_1000"] = out["pc_1000"] / out["alm_1000"]
+    # the same extrapolation anchored at L=256 instead (PC's L=256 cell is an unrefined rung)
+    out["pc_pred_256"] = out["pc_a"] * 256 ** h["pc7"]
+    out["pc_T256"] = _mean(pcd[256])
+    out["pc_a256"] = out["pc_T256"] / 256 ** h["pc7"]
+    out["alm_a256"] = _mean(refd[256]) / 256 ** h["ref7"]
+    out["pc_1000_256"] = out["pc_a256"] * 1000 ** h["pc7"]
+    out["alm_1000_256"] = out["alm_a256"] * 1000 ** h["ref7"]
+    out["ratio_1000_256"] = out["pc_1000_256"] / out["alm_1000_256"]
+    out["vs_2L_256"] = out["alm_1000_256"] / 2000
+    say("anchored at L=256", f"PC {out['pc_a256']:.3f}, PC-ALM {out['alm_a256']:.3f}; L=1000: "
+        f"{out['pc_1000_256']:.3g} / {out['alm_1000_256']:.3g} / ratio {out['ratio_1000_256']:.1f}; "
+        f"L=128 fit predicts {out['pc_pred_256']:.0f} at L=256 against {out['pc_T256']:.0f}")
     out["per_update_pc"], out["per_update_alm"] = 1 + h["pc7"], 1 + h["ref7"]
     out["doubling_alm"] = 2 ** out["per_update_alm"]
     out["vs_2L"] = out["alm_1000"] / 2000
@@ -1170,6 +1187,10 @@ EXPECTED = {
     "momentum.accelerated_prediction": "1.012", "momentum.beta_gap_within_one_rung": True,
     "prefactors.pc_a": "0.125", "prefactors.alm_a": "0.58", "prefactors.pc_1000": "1.25e5",
     "prefactors.alm_1000": "2.5e3", "prefactors.ratio_1000": "5e1",
+    "prefactors.pc_a256": "0.19", "prefactors.alm_a256": "0.54",
+    "prefactors.pc_1000_256": "1.9e5", "prefactors.alm_1000_256": "2.3e3",
+    "prefactors.ratio_1000_256": "8e1", "prefactors.vs_2L_256": "1.1",
+    "prefactors.pc_pred_256": "8192", "prefactors.pc_T256": "12288",
     "prefactors.per_update_pc": "3.00", "prefactors.per_update_alm": "2.21",
     "prefactors.doubling_alm": "4.6", "prefactors.vs_2L": "1.2",
     "prefactors.excess_over_linear": "0.21",

@@ -26,7 +26,7 @@ was altered; every measurement is taken by an external caller.
 | Inner solve only, spectrum-set Nesterov | L<sup>0.964</sup>, CI [0.829, 1.100] = the Omega(L) floor |
 | Inner solve only, multigrid V-cycle | work L<sup>1.29</sup>, rounds L<sup>2.43</sup>; 5-17x Nesterov's work |
 | Hopfield-type energy | indefinite wherever a signal crosses depth |
-| Conditioning x squared signal distortion | >= (n/pi)<sup>2</sup>, holds in all 132 measured cells |
+| Conditioning x squared signal distortion | >= ((n-1)/pi)<sup>2</sup>, consistent with all 132 positive-definite cells |
 | …repeated with 8 inputs per seed | κ ~ L<sup>2.036</sup>, CI [1.955, 2.116] |
 | …on a convolutional stack | κ ~ L<sup>2.228</sup>, CI [1.929, 2.526] |
 | PC inference budget vs depth | L<sup>1.916</sup>, CI [1.782, 2.050] |

@@ -619,8 +619,9 @@ L-2 floor. With the +/-0.066 ladder systematic this does not exclude linear scal
 ### Conditioning versus signal distortion
 `analysis/isometry_kappa.py`, `analysis/isometry_train.py` ->
 `results/strengthen/isometry_*.jsonl`. At the forward-pass point H = A^T A + B exactly.
-For any direction u with distortion D_u, kappa * D_u^2 >= n^2 / (pi^2 (1 + 2 beta/n));
-holds in all 132 positive-definite cells across 8 networks. Orthogonal linear network
+For any direction u with distortion D_u, kappa * D_u^2 >= (n-1)^2 / pi^2 for n >= 3 (test vector
+sin(pi (k-1)/(n-1)), which vanishes at both ends so the output block drops out); consistent
+with all 132 positive-definite cells across 8 networks. Orthogonal linear network
 without a skip: kappa equals the closed-form Laplacian value (1604.9 at L=32, all seeds)
 and trains at every depth. The upper bound kappa <= ((1+J_max)^2+|B|) M^2 (n+1/2)^2
 needs B positive semidefinite; it fails only in 7 orthogonal-tanh cells, all with
