@@ -101,6 +101,11 @@ python -m analysis.validate_generic
 | `multigrid_pc.py`, `run_multigrid.py` | V-cycle inner solver and the work/rounds benchmark |
 | `eigvec_smoothness.py` | is the slow mode smooth along depth? (it is) |
 | `isometry_kappa.py`, `isometry_train.py` | conditioning vs signal distortion; no-skip isometric networks |
+| `gradient_tax.py` | inner-solve iterations to a fixed weight-gradient accuracy, by layer group |
+| `kappa_trained.py` | activity-Hessian spectrum at trained weights |
+| `kappa_cifar.py`, `predict_cifar.py` | CIFAR-10 spectra; MNIST-calibrated budget prediction |
+| `log_correction_fit.py` | power law vs linear-with-log-correction, by AICc |
+| `run_momentum.py --beta-from depth` | Nesterov with momentum set from depth alone |
 | `make_figures.py` | regenerates every figure from `results/` |
 | `make_figure_ladder.py`, `make_figure_skip.py` | the rate-ladder and skip-strength figures |
 

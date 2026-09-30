@@ -1,0 +1,2 @@
+depth,seed,method,budget,test_acc,lambda_max,lambda_min,kappa,wall_sec
+256,0,pcalm,512,0.7698,4.100989,0.00001345,304978.793,1688.1

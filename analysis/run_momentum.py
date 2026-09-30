@@ -1,4 +1,5 @@
-"""Does momentum on the activities move the depth exponent from 2 to 1?
+"""ITEM 3.2 (reviewer): does momentum on the activities move the depth exponent
+from 2 to 1?
 
 Same protocol as the headline PC sweep (MNIST, width 32, 1 epoch, same frozen eta
 table, same Adam rule, same batch order, same geometric budget ladder, T <= 4L), with
@@ -70,6 +71,10 @@ def main():
                     help="cap the ladder at this budget (default: ref_mult*depth). "
                          "Set to the headline sweep's per-depth maximum so the "
                          "momentum arms see an identical budget set.")
+    ap.add_argument("--beta-from", choices=["spectrum", "depth"], default="spectrum",
+                    help="'depth' sets beta from the closed-form condition number of an "
+                         "isometric chain, kappa = cos^2(pi/(2n+1)) / sin^2(pi/(4n+2)), "
+                         "n = L-1: no spectrum is measured. The step is unchanged.")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -85,7 +90,13 @@ def main():
     if a.variant == "gd":
         beta, slr = 0.0, slr_gd
     elif a.variant == "nag":
-        beta, slr = beta_nag(kappa), slr_gd          # step held fixed: only momentum changes
+        if a.beta_from == "depth":
+            import math
+            n = L - 1
+            kappa_iso = math.cos(math.pi / (2 * n + 1)) ** 2 / math.sin(math.pi / (4 * n + 2)) ** 2
+            beta, slr = beta_nag(kappa_iso), slr_gd
+        else:
+            beta, slr = beta_nag(kappa), slr_gd      # step held fixed: only momentum changes
         beta = 1.0 - a.beta_gap_scale * (1.0 - beta)
     else:
         beta, slr = beta_hb(kappa), slr_gd * hb_step_ratio(lmax, lmin)
@@ -136,7 +147,7 @@ def main():
                                      jnp.asarray(y_tr[idx]))
             te_mse, te_ce, te_acc = evaluate(params, x_te, y_te, BS, eval_batch)
             row = dict(depth=L, width=W, seed=a.seed, method="pc", variant=a.variant,
-                       budget=T, beta=beta, beta_gap_scale=a.beta_gap_scale,
+                       budget=T, beta=beta, beta_gap_scale=a.beta_gap_scale, beta_from=a.beta_from,
                        state_lr=slr, state_lr_gd=slr_gd,
                        state_lr_provenance=prov[L], lambda_max=lmax, lambda_min=lmin,
                        kappa=kappa, learning_rate=lr, dataset=a.dataset, epochs=1,
