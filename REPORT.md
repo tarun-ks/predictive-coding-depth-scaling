@@ -630,3 +630,18 @@ indefinite B.
 ### Depth 256, PC
 `results/d256_ext/`. All three seeds reach 90% of depth-matched BP at T=12288 and stay
 above threshold at T=16384. PC fit over L=4-256: `+2.000  [+1.848, +2.152]  n=33/7d`.
+
+### Width 128
+`analysis/run_wide.py`, `analysis/run_wide_extend.sh`, `analysis/timing_wide.py`,
+`analysis/wide_analysis.py` -> `results/wide128/`, `results/wide128_timing.csv`. MNIST, width
+128, depths 8-128, three seeds; Nesterov's beta set from depth alone.
+  * At 90% of depth-matched BP, 40 budgets (every PC-ALM and Nesterov budget) fall below the
+    L-1 floor: the wider network clears that bar before credit reaches its input layers. The
+    bar is therefore the loosest on 90/95/97/98/99% with no budget below the floor: 97%.
+  * At 97%: PC `L^2.175 [2.057, 2.294]` (5 depths), PC-ALM `L^1.258 [1.100, 1.417]`,
+    Nesterov `L^1.214 [0.993, 1.436]` (8-64), matching PC-ALM's budgets to depth 64.
+  * Nesterov at depth 128 reaches the bar at T=256, like PC-ALM, but loses accuracy with more
+    iterations (91.19% -> 85.94% at T=1024, seed 0), so the hold window censors it.
+  * Wall clock at depth 64: PC 5.9 min/epoch, PC-ALM 1.7, Nesterov 1.2 (5.1x faster than PC);
+    a Nesterov iteration costs 1.5x a PC iteration at this width.
+

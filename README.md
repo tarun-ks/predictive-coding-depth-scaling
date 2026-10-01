@@ -26,6 +26,7 @@ was altered; every measurement is taken by an external caller.
 | Inner solve only, spectrum-set Nesterov | L<sup>0.964</sup>, CI [0.829, 1.100] = the Omega(L) floor |
 | Inner solve only, multigrid V-cycle | work L<sup>1.29</sup>, rounds L<sup>2.43</sup>; 5-17x Nesterov's work |
 | Hopfield-type energy | indefinite wherever a signal crosses depth |
+| At width 128 (bar 97% of BP, the loosest that clears the floor) | PC L<sup>2.18</sup>, PC-ALM L<sup>1.26</sup>, Nesterov L<sup>1.21</sup> (to depth 64); Nesterov 5.1x faster than PC at depth 64 |
 | Conditioning x squared signal distortion | >= ((n-1)/pi)<sup>2</sup>, consistent with all 132 positive-definite cells |
 | …repeated with 8 inputs per seed | κ ~ L<sup>2.036</sup>, CI [1.955, 2.116] |
 | …on a convolutional stack | κ ~ L<sup>2.228</sup>, CI [1.929, 2.526] |
@@ -115,6 +116,8 @@ python -m analysis.validate_generic
 | `output_curvature.py` | eigenvalues of the output-loss block where the upper conditioning bound fails |
 | `estar_wander.py` | why the reference minimum is the lowest iterate, not the last |
 | `timing_probe.py` | wall-clock cost per inner iteration, PC-ALM against PC |
+| `run_wide.py`, `run_wide_extend.sh` | the depth sweep at width 128, all four arms |
+| `timing_wide.py`, `wide_analysis.py` | width-128 wall-clock timing and analysis, with the floor rule for the accuracy bar |
 
 ## Five things worth knowing before reusing this
 

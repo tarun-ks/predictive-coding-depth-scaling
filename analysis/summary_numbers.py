@@ -953,6 +953,55 @@ def width_and_networks(quiet=False):
     return out
 
 
+def wide128(quiet=False):
+    """The protocol at width 128 (analysis/run_wide.py, run_wide_extend.sh, timing_wide.py)."""
+    say, out = _say(quiet, "width 128"), {}
+    W = _import_quietly("analysis.wide_analysis")
+    bp = {k: v[0] for k, v in W.curves("bp").items()}
+    cur = {m: W.curves(m) for m in W.ARMS}
+    below = {}
+    for frac in W.BARS:
+        r = {m: W.targets(cur[m], bp, frac) for m in W.ARMS}
+        below[frac] = sum(t < L - 1 for m in W.ARMS for L, ts in r[m][0].items() for t in ts)
+    out["below_90"], out["below_95"] = below[0.90], below[0.95]
+    bar = next(f for f in W.BARS if below[f] == 0)
+    out["bar"] = 100 * bar
+    say("cells below the L-1 floor by bar; bar used", f"{below}; {bar:.0%}")
+    for frac in (0.95, bar, 0.98):
+        for m in W.ARMS:
+            f, Ls = W.fit(*W.targets(cur[m], bp, frac))
+            key = f"{m}_{round(100 * frac)}"
+            if f:
+                _put(out, key, f)
+            out[key + "_depths"] = len(Ls)
+            say(f"{m} at {frac:.0%}", f"{_fmt(f) if f else 'n/a'} over {Ls}")
+    out["bp_L8"] = 100 * _mean([a for (L, s), a in bp.items() if L == 8])
+    out["bp_L128"] = 100 * _mean([a for (L, s), a in bp.items() if L == 128])
+    det = {m: W.targets(cur[m], bp, bar) for m in W.ARMS}
+    for m in W.ARMS:
+        for L, ts in det[m][0].items():
+            out[f"{m}_L{L}_min"], out[f"{m}_L{L}_max"] = min(ts), max(ts)
+    out["nag_censored_L128"] = det["nag"][1].get(128, 0)
+    c0 = cur["nag"][(128, 0)]
+    out["nag_L128_s0_T256"], out["nag_L128_s0_T1024"] = 100 * c0[256], 100 * c0[1024]
+    say("Nesterov L=128 seed 0, accuracy at T=256 / T=1024 (%)",
+        f"{out['nag_L128_s0_T256']:.2f} / {out['nag_L128_s0_T1024']:.2f}")
+    cost = {(int(r["depth"]), r["method"]): (float(r["fixed_ms"]), float(r["per_iter_ms"]))
+            for r in csv.DictReader(open(RES / "wide128_timing.csv"))}
+    mins = {m: W.STEPS * (cost[(64, m)][0] + _mean(det[m][0][64]) * cost[(64, m)][1]) / 6e4
+            for m in W.ARMS}
+    out.update(min_pc_L64=mins["pc"], min_pcalm_L64=mins["pcalm"], min_nag_L64=mins["nag"],
+               speedup_pc_nag_L64=mins["pc"] / mins["nag"],
+               iter_ratio_nag_pc_L64=cost[(64, "nag")][1] / cost[(64, "pc")][1])
+    say("L=64 minutes per epoch at the budget needed, PC / PC-ALM / Nesterov; speedup",
+        f"{mins['pc']:.2f} / {mins['pcalm']:.2f} / {mins['nag']:.2f}; "
+        f"{out['speedup_pc_nag_L64']:.1f}x (Nesterov iteration {out['iter_ratio_nag_pc_L64']:.2f}x PC)")
+    hours = sum(r.get("wall_sec", 0) for f in (RES / "wide128").glob("*.jsonl")
+                for r in map(json.loads, filter(str.strip, open(f))))
+    out["process_hours"] = hours / 3600
+    return out
+
+
 def timing(quiet=False):
     """Wall-clock cost per inner iteration, PC-ALM against PC, at T = 2L (timing_probe.py)."""
     say, out = _say(quiet, "wall-clock cost per inner iteration"), {}
@@ -1087,7 +1136,7 @@ def trained_kappa(quiet=False):
 GROUPS = (kappa_spectrum, step_size_offsets, skip_strength, isometry, budget_ladder,
           threshold_fits, headline_fits, grid_systematic, log_correction, gradient_alignment,
           robustness, cifar, momentum, prefactors, measurement_checks, hopfield, mechanisms,
-          width_and_networks, timing, solvers, gradient_tax, trained_kappa)
+          width_and_networks, wide128, timing, solvers, gradient_tax, trained_kappa)
 
 
 # ------------------------------------------------------------------------ --check
@@ -1249,6 +1298,18 @@ EXPECTED = {
     "width_and_networks.expansive_indefinite_from": "32",
     "width_and_networks.orth_relu_fails_by": "64", "width_and_networks.contract_tanh_fails_by": "32",
     "momentum.beta_gap_max_rung_shift": "0",
+    "wide128.below_90": "40", "wide128.below_95": "8", "wide128.bar": "97",
+    "wide128.pc_97": "2.175", "wide128.pc_97_lo": "2.057", "wide128.pc_97_hi": "2.294",
+    "wide128.pcalm_97": "1.258", "wide128.pcalm_97_lo": "1.100", "wide128.pcalm_97_hi": "1.417",
+    "wide128.nag_97": "1.214", "wide128.nag_97_lo": "0.993", "wide128.nag_97_hi": "1.436",
+    "wide128.pc_97_depths": "5", "wide128.pcalm_97_depths": "5", "wide128.nag_97_depths": "4",
+    "wide128.pc_95": "2.04", "wide128.pcalm_95": "1.25", "wide128.nag_95": "1.32",
+    "wide128.pc_98": "2.08", "wide128.pcalm_98": "1.20",
+    "wide128.bp_L8": "94.59", "wide128.bp_L128": "93.44", "wide128.nag_censored_L128": "3",
+    "wide128.nag_L128_s0_T256": "91.19", "wide128.nag_L128_s0_T1024": "85.94",
+    "wide128.min_pc_L64": "5.9", "wide128.min_pcalm_L64": "1.7", "wide128.min_nag_L64": "1.2",
+    "wide128.speedup_pc_nag_L64": "5.1", "wide128.iter_ratio_nag_pc_L64": "1.5",
+    "wide128.pc_L128_min": "3072", "wide128.pcalm_L128_min": "256", "wide128.nag_L64_max": "96",
     "timing.ratio_L32": "2.7", "timing.ratio_deep_min": "1.6", "timing.ratio_deep_max": "1.8",
     "timing.alm_pc_equiv_L128": "3.6e2", "timing.alm_advantage_L128": "5.7",
 }
